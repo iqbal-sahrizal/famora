@@ -1,84 +1,60 @@
-# Famora — Phase M8: Direct Production Deployment Report
+# Famora — Phase M8: Production Deployment Report (Reuse Existing Infrastructure)
 
 **Final Verdict:** `PRODUCTION_DEPLOYMENT_BLOCKED`  
-**Strategy:** `PRODUCTION_ONLY — NO STAGING`  
+**Strategy:** `PRODUCTION_ONLY — NO STAGING` (Reuse existing hosted Supabase & Vercel project)  
 **Date:** 2026-11-23
 
 ---
 
-## 1. Infrastructure Discovery & Blockers
+## 1. Pre-Deployment Audit (`PASSED`)
 
-| Component | Discovered State | Blocker / Status |
-| :--- | :--- | :--- |
-| **GitHub / Git** | `origin` = `git@github.com:iqbal-sahrizal/famora.git`, branch `main`, `HEAD` = `3c5daaa428731ed2ec567dcc16bfa8f4693b6a1b` | **Uncommitted local changes** (M1–M7.1 + `0035_fix_delete_family_workspace_rpc.sql`) not yet committed/pushed to `origin/main`. |
-| **Vercel** | `vercel` CLI not installed; `famora/.vercel` absent | **BLOCKED:** No linked Vercel project, auth session, or production URL available. |
-| **Supabase Production** | `supabase` CLI not installed; `.env.local` holds development-only vars | **BLOCKED:** No dedicated production Supabase project reference provisioned; development Supabase must NOT be used. |
-| **User-Owned Domain** | Not configured in repository | **BLOCKED:** Domain name and Vercel DNS assignment not yet provided/linked. |
-
----
-
-## 2. Database Migrations, Seed Distinction & RLS Validation
-
-- **Migrations (`0001`–`0035`, 35 files total):**
-  - Static validation (`npm --prefix famora run db:validate`) **PASSED**: `35` migrations, `78` RLS-forced tables, `25` hardened `SECURITY DEFINER` functions, column-level `pin_hash` protection, zero unrestricted policies, zero client service-role references.
-  - System reference roles/permissions are seeded inside `0005_seed_roles_and_permissions.sql` (production-required).
-- **Seed script distinction:** `supabase/seed.sql` contains demo/local-only users (`maya@famora.local`, `daniel@famora.local`) and **MUST NOT** be executed in production.
-- **Execution status:** **NOT EXECUTED** (`0` migrations applied to production because the dedicated production Supabase project is not provisioned yet).
-
-### Exact Supabase Production Setup Steps (User Action Required)
-1. Create a **new, dedicated Production Supabase project** in Supabase Dashboard (separate from dev).
-2. Enable **Point-in-Time Recovery (PITR) / daily backups** before running migrations.
-3. Apply `supabase/migrations/0001_extensions_and_helpers.sql` through `0035_fix_delete_family_workspace_rpc.sql` sequentially (`supabase db push` or SQL Editor in strict numeric order; **never** run `db reset` or `supabase/seed.sql`).
-4. In **Authentication → URL Configuration**:
-   - **Site URL:** `https://<production-domain>`
-   - **Redirect URLs:** `https://<production-domain>/auth/callback`, `https://<production-domain>/**`
-   - Enable email confirmation and configure SMTP provider.
-5. Verify **Storage buckets & policies** created by migrations (`chat-attachments`, `family-documents`, `family-memories`, `child-dev-attachments` private with RLS).
+- **Repository & Branch:** `git@github.com:iqbal-sahrizal/famora.git`, branch `main`, base `HEAD` = `3c5daaa428731ed2ec567dcc16bfa8f4693b6a1b`.
+- **Push Access:** `git -C famora push --dry-run origin main` succeeded (`Everything up-to-date`).
+- **Secret Hygiene:** `NO_UNTRACKED_SECRETS` (`.env*` ignored by `.gitignore`; `tsconfig.tsbuildinfo`, `playwright-report/`, `test-results/` excluded).
+- **Validation Results (run on M1–M7.1 code + migration `0035`):**
+  - `npm --prefix famora run db:validate`: **PASSED** (`35` migrations, `78` RLS-forced tables, `25` hardened `SECURITY DEFINER` functions, column-level `pin_hash` protection, zero unrestricted policies, zero client service-role references).
+  - `npm --prefix famora run typecheck`: **PASSED** (`0` errors).
+  - `npm --prefix famora run lint`: **PASSED** (`0` errors, `0` warnings).
+  - `npm --prefix famora test`: **PASSED** (`33` files, `150/150` unit tests).
+  - `npm --prefix famora run build`: **PASSED**.
 
 ---
 
-## 3. Production Environment Variables Checklist (Names Only — No Values)
+## 2. Existing Supabase Project (`eaxrhlgwsepdlfnveypo`) — Stopped at Backup & Migration
 
-Configure in **Vercel → Project Settings → Environment Variables** (Production scope):
+- **Target Project Reference:** `eaxrhlgwsepdlfnveypo` (`https://eaxrhlgwsepdlfnveypo.supabase.co` — confirmed hosted Supabase project).
+- **Migration `0035_fix_delete_family_workspace_rpc.sql` Audit:** Safe (`CREATE OR REPLACE FUNCTION` fixing deletion dependency order and revoking `anon` execute).
+- **Seed Policy:** `supabase/seed.sql` MUST **NOT** be executed.
+- **Stop Reason (Blocker):** `supabase` CLI is not installed (`NO_SUPABASE_CLI`), and no Supabase management access token or direct Postgres connection URI is available in this environment to:
+  1. Trigger/verify a pre-migration database backup on `eaxrhlgwsepdlfnveypo`.
+  2. Query `supabase_migrations.schema_migrations` to determine which of `0001`–`0035` are unapplied and apply only missing migrations.
 
-| Variable | Scope | Required / Optional | Notes |
-| :--- | :--- | :--- | :--- |
-| `NEXT_PUBLIC_APP_NAME` | Client + Server | Required | `"Famora"` |
-| `NEXT_PUBLIC_APP_URL` | Client + Server | Required | Canonical `https://<production-domain>` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Client + Server | Required | Dedicated **Production** Supabase URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client + Server | Required | Dedicated **Production** Supabase anon/publishable key |
-| `OPENAI_API_KEY` (or `AI_PROVIDER_API_KEY`) | **Server-only** | Optional (AI) | Required only if AI Assistant LLM mode is enabled |
-| `OPENAI_MODEL` / `OPENAI_BASE_URL` | **Server-only** | Optional (AI) | Optional model/base URL override |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Client + Server | Optional (Push) | Required only if Web Push is enabled |
-| `VAPID_PRIVATE_KEY` | **Server-only** | Optional (Push) | Never prefix with `NEXT_PUBLIC_` |
-| `VAPID_SUBJECT` | **Server-only** | Optional (Push) | e.g. `mailto:support@<production-domain>` |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Server-only** | Optional | Never expose in `NEXT_PUBLIC_*` or client code |
-| `APP_ENCRYPTION_KEY` | **Server-only** | Optional | `>= 32` chars if configured |
-
----
-
-## 4. Vercel & Domain Configuration Steps (User Action Required)
-
-1. Commit and push verified `main` changes to `git@github.com:iqbal-sahrizal/famora.git`.
-2. In Vercel Dashboard, import `iqbal-sahrizal/famora` (Framework: **Next.js**, Root Directory: `famora` if repo root is parent, Build Command: `npm run build`, Install Command: `npm install`, Node.js: `20.x` or `22.x`).
-3. Add the Production environment variables above.
-4. Add user-owned domain under **Vercel → Domains** and apply the exact `A` / `CNAME` DNS records provided by Vercel (without altering unrelated DNS records), confirming HTTPS certificate issuance.
+### Required User Action (Supabase Dashboard / CLI)
+1. Open Supabase Dashboard for project **`eaxrhlgwsepdlfnveypo`** → **Database → Backups** and create/confirm a manual backup (or verify PITR) before migrating.
+2. Check applied migrations in **SQL Editor**:
+   ```sql
+   SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version;
+   ```
+3. Apply only unapplied migrations from `supabase/migrations/` in strict numeric order (e.g., `0035_fix_delete_family_workspace_rpc.sql` if missing). Do **not** run `supabase/seed.sql` or `db reset`.
 
 ---
 
-## 5. Production Smoke Tests, Monitoring & Accepted Verification Debt
+## 3. Existing Vercel Project & Deployment — Stopped Pending DB & CLI/Domain Access
 
-- **Live Production Smoke Tests:** **NOT EXECUTED (BLOCKED)** — awaiting live production URL and deployment.
-- **Monitoring:** Once deployed, monitor Vercel Runtime/Deployment Logs, Supabase Auth & Postgres Logs, `/api/health`, and backup status in Supabase Dashboard.
-- **Accepted Verification Debt (from M7.1, explicitly documented — NOT passed):**
-  1. `7` authenticated E2E tests (`aud-001`, `aud-002`, `aud-003`, `mobile-m2-dashboard`, `mobile-m4-core`, `mobile-m5-comms`, `mobile-m7-qa`) not executed (missing `E2E_SUPABASE_URL` / `E2E_SUPABASE_SERVICE_ROLE_KEY`).
-  2. `npm run test:rls` not executed against an isolated live PostgreSQL instance (`TEST_DATABASE_URL` unset).
-  3. Physical iOS/Android hardware and Firefox/WebKit browser testing incomplete.
-  4. M5 DB/RLS hardening recommendations (`0024_family_chat.sql`, `0028_ai_assistant.sql`) and Push Outbox service-role worker remain open.
+- **GitHub Push Status:** Not yet pushed to `origin/main` so an automatic Vercel production deploy is not triggered before the `eaxrhlgwsepdlfnveypo` backup & migration check completes.
+- **Vercel CLI / Config:** `vercel` CLI is not installed (`NO_VERCEL_CLI`), `famora/.vercel` is absent, and the production domain URL is not stored in the repository.
+- **Required User Action (Vercel Dashboard):**
+  1. Confirm existing Vercel project is linked to `iqbal-sahrizal/famora` (branch `main`, Root Directory `famora`, Build Command `npm run build`).
+  2. Confirm Production Environment Variables: `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_APP_URL` (`https://<production-domain>`), `NEXT_PUBLIC_SUPABASE_URL` (`https://eaxrhlgwsepdlfnveypo.supabase.co`), `NEXT_PUBLIC_SUPABASE_ANON_KEY`, plus server-only `OPENAI_API_KEY` (and `VAPID_*` if push is enabled).
+  3. Confirm Supabase **Authentication → URL Configuration** Site URL & Redirect URLs match `https://<production-domain>`.
+  4. Once Supabase backup & migrations are complete, commit & push `main` (excluding `tsconfig.tsbuildinfo` and `.env*`) to trigger Vercel production deployment, then verify HTTPS & smoke tests on the live domain.
 
 ---
 
-## 6. Rollback Procedure
+## 4. Production Smoke Tests & Accepted Verification Debt
 
-- **Application Rollback (Vercel):** Promote the previous healthy deployment in **Vercel → Deployments → Instant Rollback**. *(Does NOT revert database migrations.)*
-- **Database Recovery (Supabase):** Prefer a reviewed forward-fix migration (`0036_*.sql`). If severe data corruption occurs, restore from Supabase Dashboard Backup / PITR via deliberate recovery procedure; never run destructive `db reset` in production.
+- **Live Production Smoke Tests:** **NOT EXECUTED** (blocked pending live deployment URL).
+- **Accepted Verification Debt (from M7.1, NOT passed):**
+  - `7` authenticated E2E tests not executed (`E2E_SUPABASE_URL` / `E2E_SUPABASE_SERVICE_ROLE_KEY` unset).
+  - `npm run test:rls` not executed against a live isolated PostgreSQL instance (`TEST_DATABASE_URL` unset).
+  - Physical iOS/Android and Firefox/WebKit browser testing incomplete.

@@ -55,7 +55,7 @@ export default async function HomePage() {
   return (
     <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       {/* Top Navigation */}
-      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex max-w-[1160px] flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-8 sm:py-4">
           <Link href={routes.home} className="flex min-h-11 items-center gap-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">

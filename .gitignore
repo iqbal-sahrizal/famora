@@ -18,3 +18,13 @@ blob-report/
 
 # OS
 .DS_Store
+
+# Android signing & build artifacts
+*.keystore
+*.jks
+android/.gradle/
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+.vercel
+.env*
