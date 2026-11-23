@@ -1,0 +1,11 @@
+# Famora — Phase 1.1 E2E Test Report
+
+**Date**: 2026-11-23  
+**Browser Tooling Status**: `playwright` not installed (`which playwright` -> not found); no multi-role seeded Supabase test accounts configured.
+
+| Scenario ID | Preconditions | Execution Steps | Expected Result | Actual Result | Evidence | Verification Level | Status |
+|---|---|---|---|---|---|---|---|
+| **E2E-AUD001-01** | Authenticated user on `/f/[familyId]/tasks` or `/shopping`; Playwright + seeded DB | 1. Perform online mutation. 2. Disconnect network. 3. Create offline mutation. 4. Reconnect & click `PwaStatusBar` Retry. 5. Reload and check DB. | Server Action runs once; DB persists; outbox clears; reload shows no duplicate. | Not executed in browser (`playwright` & test DB absent). | `pwa-sync.test.ts` verified retry, idempotency, and concurrent lock in Node. | `UNIT_VERIFIED` (Browser: `BLOCKED`) | **BLOCKED** |
+| **E2E-AUD001-02** | Expired auth session + pending IndexedDB mutation | 1. Expire session. 2. Trigger `retrySync()`. | Flush pauses, preserves outbox item, and shows `Session expired · Sign in`. | Not executed in browser. | `pwa-sync.test.ts` verified `authExpired` pause & preservation. | `UNIT_VERIFIED` (Browser: `BLOCKED`) | **BLOCKED** |
+| **E2E-AUD002-01** | User belonging to 2 families (`fam-a`, `fam-b`) | 1. Navigate to `/account`. 2. Switch `fam-a` -> `fam-b`. 3. Attempt unauthorized `fam-c`. 4. Sign out & reload / Back. | Switch updates workspace without data leak; `fam-c` blocked; logout invalidates session. | Not executed in browser. | `workspace-navigation.test.ts` verified `validateFamilySwitchTarget` & store reset. | `UNIT_VERIFIED` (Browser: `BLOCKED`) | **BLOCKED** |
+| **E2E-AUD003-01** | Authenticated user visiting Dashboard, Shopping, Tasks, Calendar | 1. Load online. 2. Go offline & reload. 3. Mutate Shopping/Tasks/Calendar. 4. Inspect IndexedDB. 5. Reconnect & verify DB. | Cached data renders; mutations persist in `famora-pwa-db`; legacy `localStorage` migrates safely; sync completes on reconnect. | Not executed in browser. | `pwa-sync.test.ts` verified IndexedDB fallback stores, `migrateLegacyShoppingQueue`, and family isolation. | `UNIT_VERIFIED` (Browser: `BLOCKED`) | **BLOCKED** |

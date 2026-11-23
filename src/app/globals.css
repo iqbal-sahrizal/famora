@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Core Palette */
+  --famora-warm-white: #F7F5EF;
+  --famora-sage-green: #DCE8D9;
+  --famora-forest-green: #315C49;
+  --famora-soft-peach: #E9B98B;
+  --famora-muted-lavender: #E9DDF5;
+  --famora-soft-blush: #F3D9D1;
+  --famora-charcoal: #282C29;
+
+  /* Light Theme Semantic Tokens */
+  --bg-canvas: #F7F5EF;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #EFECE4;
+  --bg-hover: #E7E3D9;
+
+  --text-primary: #282C29;
+  --text-secondary: #5E645F;
+  --text-muted: #848A85;
+
+  --border-subtle: rgba(40, 44, 41, 0.08);
+  --border-strong: rgba(40, 44, 41, 0.16);
+
+  --accent-primary: #315C49;
+  --accent-primary-hover: #274B3B;
+  --accent-primary-fg: #F7F5EF;
+
+  --tint-sage: #DCE8D9;
+  --tint-sage-fg: #234234;
+  --tint-peach: #E9B98B;
+  --tint-peach-fg: #5C3B1C;
+  --tint-lavender: #E9DDF5;
+  --tint-lavender-fg: #46325C;
+  --tint-blush: #F3D9D1;
+  --tint-blush-fg: #633226;
+
+  --status-danger: #C2413B;
+  --status-danger-bg: #FBE9E7;
+  --status-danger-fg: #8E2823;
+
+  --shadow-soft: 0 4px 20px -2px rgba(40, 44, 41, 0.05), 0 1px 3px rgba(40, 44, 41, 0.03);
+  --shadow-float: 0 16px 40px -8px rgba(40, 44, 41, 0.12), 0 4px 12px rgba(40, 44, 41, 0.05);
+}
+
+.dark {
+  --bg-canvas: #161917;
+  --bg-surface: #1F2320;
+  --bg-subtle: #282C29;
+  --bg-hover: #323734;
+
+  --text-primary: #F7F5EF;
+  --text-secondary: #B5BCB7;
+  --text-muted: #848B86;
+
+  --border-subtle: rgba(247, 245, 239, 0.09);
+  --border-strong: rgba(247, 245, 239, 0.18);
+
+  --accent-primary: #528C72;
+  --accent-primary-hover: #629E83;
+  --accent-primary-fg: #121513;
+
+  --tint-sage: rgba(220, 232, 217, 0.14);
+  --tint-sage-fg: #BFE0B7;
+  --tint-peach: rgba(233, 185, 139, 0.16);
+  --tint-peach-fg: #F2CCA6;
+  --tint-lavender: rgba(233, 221, 245, 0.14);
+  --tint-lavender-fg: #D7C3EE;
+  --tint-blush: rgba(243, 217, 209, 0.15);
+  --tint-blush-fg: #F0C6BA;
+
+  --status-danger: #E56B65;
+  --status-danger-bg: rgba(229, 107, 101, 0.15);
+  --status-danger-fg: #F5B5B2;
+
+  --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.25);
+  --shadow-float: 0 18px 44px -8px rgba(0, 0, 0, 0.45);
+}
+
+@layer base {
+  html {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: var(--font-jakarta), system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  * {
+    border-color: var(--border-subtle);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes famora-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.famora-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-subtle) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-subtle) 75%
+  );
+  background-size: 200% 100%;
+  animation: famora-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

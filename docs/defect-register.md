@@ -1,0 +1,7 @@
+# Famora Defect Register (Step 28)
+
+| ID | Severity | Area | Description | Status | Resolution |
+| --- | --- | --- | --- | --- | --- |
+| **DEF-001** | High | UX / Mobile Modals (`src/components/ui/dialog.tsx`) | `Dialog` and `BottomSheet` did not lock `document.body.style.overflow` when open and lacked `max-h-[88dvh] overflow-y-auto` + `env(safe-area-inset-bottom)` padding, risking background scroll bleed and clipped submit buttons on mobile keyboards. | **Fixed** | Added `document.body.style.overflow = "hidden"` lifecycle cleanup, `max-h-[88dvh] overflow-y-auto overscroll-contain`, and safe-area bottom padding. |
+| **DEF-002** | High | Integration / Notifications (`tasks`, `calendar`, `finance`, `documents`) | Legacy `notifications.insert(...)` calls in Tasks, Calendar, Budgets/Bills, and Documents omitted the `category` column introduced in `0027_notification_system.sql`, causing all of them to fall back to `'activity'` in Notification Center filters. | **Fixed** | Added explicit `category` values (`task_assignment`, `calendar`, `bill_reminder`, `document_expiration`) to each notification insert. |
+| **DEF-003** | Low | Testing Environment | Live Postgres (`pgTAP`), physical mobile browser PWA install/offline verification, and live VAPID Web Push dispatch cannot run in the local offline sandbox without Docker/Supabase CLI and VAPID keys. | **Open (Env)** | Documented honestly in `docs/pwa-platform-notes.md` and verification reports; static `db:validate` + 23 Vitest suites cover all logic/security rules. |
