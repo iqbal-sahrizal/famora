@@ -35,9 +35,9 @@ export async function getWorkspaceShellContext(
     const [{ data: profile }, { data: memberships }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("display_name")
+        .select("full_name")
         .eq("id", user.id)
-        .maybeSingle<{ display_name: string }>(),
+        .maybeSingle<{ full_name: string }>(),
       supabase
         .from("family_members")
         .select("family_id, families!inner(id, name), family_roles!inner(role_key)")
@@ -86,7 +86,7 @@ export async function getWorkspaceShellContext(
     }
 
     return {
-      userName: profile?.display_name || fallbackName,
+      userName: profile?.full_name || fallbackName,
       families,
       memberLocale,
     };

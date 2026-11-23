@@ -65,7 +65,7 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }));
 
-import { saveCalendarEventAction } from "../actions";
+import { cancelCalendarEventAction, saveCalendarEventAction } from "../actions";
 
 const BASE_EVENT: CalendarEventRecord = {
   id: "ev-1",
@@ -206,5 +206,13 @@ describe("Famora Calendar — Recurrence, Date Boundaries & Permissions", () => 
     expect(allowed.ok).toBe(true);
     expect(insertedNotifications).toHaveLength(1);
     expect(insertedNotifications[0].domain).toBe("calendar");
+
+    mockPerms = [];
+    const cancelDenied = await cancelCalendarEventAction({
+      familyId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      eventId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    });
+    expect(cancelDenied.ok).toBe(false);
+    expect(cancelDenied.error).toContain("permission");
   });
 });

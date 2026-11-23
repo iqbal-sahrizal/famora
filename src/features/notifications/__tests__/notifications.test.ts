@@ -137,4 +137,20 @@ describe("Notification System — Push Subscriptions, Quiet Hours, Preferences &
     expect(isExpiredPushStatus(404)).toBe(true);
     expect(isExpiredPushStatus(500)).toBe(false);
   });
+
+  it("blocks protocol-relative or external deep links in sanitizePushPayload", () => {
+    const protocolRelative = sanitizePushPayload({
+      category: "announcement",
+      title: "Family update",
+      deepLink: "//evil.com/phish",
+    });
+    expect(protocolRelative.url).toBe("/");
+
+    const externalUrl = sanitizePushPayload({
+      category: "announcement",
+      title: "Family update",
+      deepLink: "https://evil.com/phish",
+    });
+    expect(externalUrl.url).toBe("/");
+  });
 });

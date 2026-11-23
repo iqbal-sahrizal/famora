@@ -268,4 +268,28 @@ describe("Famora Shopping Lists — Collaboration, Idempotency & Offline Queue",
     expect(missingRes.ok).toBe(false);
     expect(missingRes.error).toContain("not found");
   });
+
+  it("blocks updateShoppingItemAction and deleteShoppingItemAction without shopping.manage permission", async () => {
+    const { updateShoppingItemAction, deleteShoppingItemAction } = await import("../actions");
+    mockPerms = [];
+    const updRes = await updateShoppingItemAction({
+      familyId: FAM_ID,
+      itemId: LIST_ID,
+      name: "Milk",
+      category: "Groceries",
+      quantity: "2",
+      unit: "L",
+      estimatedPriceCents: 350,
+      notes: "",
+    });
+    expect(updRes.ok).toBe(false);
+    expect(updRes.error).toContain("permission");
+
+    const delRes = await deleteShoppingItemAction({
+      familyId: FAM_ID,
+      itemId: LIST_ID,
+    });
+    expect(delRes.ok).toBe(false);
+    expect(delRes.error).toContain("permission");
+  });
 });

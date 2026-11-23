@@ -18,13 +18,13 @@ import { PageHeader, Section } from "@/components/layout/primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BottomSheet, Dialog } from "@/components/ui/dialog";
+import { BottomSheet } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { formatLocalizedDate } from "@/lib/i18n";
+import { formatLocalizedDate, toIntlLocale } from "@/lib/i18n";
 import { useLocale } from "@/providers/locale-provider";
 import {
   createBillAction,
@@ -495,32 +495,36 @@ export function FamilyBudgetsBillsView({
         </form>
       </BottomSheet>
 
-      <Dialog
+      <BottomSheet
         open={Boolean(payTarget)}
         onClose={() => setPayTarget(null)}
         title={t("budgets.modal.payTitle")}
         description={
           payTarget
             ? t("budgets.modal.payDesc", {
-                amount: formatNumericCurrency(payTarget.amountNumeric, data.currencyCode),
+                amount: formatNumericCurrency(payTarget.amountNumeric, data.currencyCode, toIntlLocale(locale)),
                 payee: payTarget.payee,
               })
             : ""
         }
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setPayTarget(null)}>{t("common.cancel")}</Button>
-            <Button isLoading={busy} onClick={handlePayBill}>{t("budgets.modal.confirmPayBtn")}</Button>
-          </>
-        }
       >
-        <Select
-          label={t("budgets.modal.payFromAccount")}
-          value={payAccountId}
-          onChange={(e) => setPayAccountId(e.target.value)}
-          options={data.accounts.map((a) => ({ value: a.id, label: a.name }))}
-        />
-      </Dialog>
+        <div className="space-y-4">
+          <Select
+            label={t("budgets.modal.payFromAccount")}
+            value={payAccountId}
+            onChange={(e) => setPayAccountId(e.target.value)}
+            options={data.accounts.map((a) => ({ value: a.id, label: a.name }))}
+          />
+          <div className="flex flex-wrap justify-end gap-2.5 pt-2">
+            <Button variant="ghost" onClick={() => setPayTarget(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button isLoading={busy} onClick={handlePayBill}>
+              {t("budgets.modal.confirmPayBtn")}
+            </Button>
+          </div>
+        </div>
+      </BottomSheet>
     </Section>
   );
 }

@@ -112,10 +112,15 @@ export function sanitizePushPayload(params: {
     params.category === "chat" ||
     /[$€£]|Rp|USD|EUR|IDR|\d{4,}/i.test(params.title);
 
+  const safeDeepLink =
+    params.deepLink.startsWith("/") && !params.deepLink.startsWith("//")
+      ? params.deepLink
+      : "/";
+
   return {
     title: hasSensitiveHint ? safeTitle : params.title.slice(0, 80) || safeTitle,
     body: "Open Famora to view details.",
-    url: params.deepLink.startsWith("/") ? params.deepLink : "/",
+    url: safeDeepLink,
   };
 }
 

@@ -101,9 +101,9 @@ export function AuthShell({
       </aside>
 
       {/* Right Form Panel */}
-      <div className="flex min-h-screen flex-col justify-between px-6 py-8 sm:px-12">
-        <div className="flex items-center justify-between">
-          <Link href={routes.home} className="flex items-center gap-2.5 lg:hidden">
+      <div className="flex min-h-dvh flex-col justify-between px-4 py-6 sm:px-12 sm:py-8">
+        <div className="flex items-center justify-between gap-2">
+          <Link href={routes.home} className="flex min-h-11 items-center gap-2.5 lg:hidden">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">
               <HeartHandshake className="h-5 w-5" />
             </div>
@@ -113,7 +113,7 @@ export function AuthShell({
             <button
               type="button"
               onClick={() => setLocale(locale === "id" ? "en" : "id")}
-              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[12px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+              className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
               aria-label={t("settings.language.label")}
             >
               {locale === "id" ? "ID" : "EN"}

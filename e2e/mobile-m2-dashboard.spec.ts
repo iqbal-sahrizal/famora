@@ -1,0 +1,65 @@
+import { expect, test } from "@playwright/test";
+import {
+  cleanupPhase1Fixtures,
+  hasIsolatedE2EAdmin,
+  seedPhase1Fixtures,
+} from "./fixtures/test-data";
+
+const VIEWPORTS = [
+  { name: "320x720", width: 320, height: 720 },
+  { name: "360x800", width: 360, height: 800 },
+  { name: "375x812", width: 375, height: 812 },
+  { name: "390x844", width: 390, height: 844 },
+  { name: "430x932", width: 430, height: 932 },
+  { name: "1280x800", width: 1280, height: 800 },
+] as const;
+
+test.describe("Phase M2 — Mobile Dashboard Experience", () => {
+  for (const vp of VIEWPORTS) {
+    test(`fails closed cleanly without horizontal overflow on protected dashboard route at ${vp.name}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto("/f/00000000-0000-0000-0000-000000000000");
+      await expect(page).toHaveURL(/\/login/);
+      const overflow = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+    });
+  }
+
+  test("renders authenticated mobile & desktop dashboard sections, quick actions, and localization", async ({
+    page,
+  }) => {
+    test.skip(
+      !hasIsolatedE2EAdmin(),
+      "BLOCKED: Requires isolated E2E_SUPABASE_URL and E2E_SUPABASE_SERVICE_ROLE_KEY."
+    );
+
+    const fixtures = await seedPhase1Fixtures();
+    try {
+      await page.goto("/login");
+      await page.getByLabel(/Email/i).fill(fixtures.userA.email);
+      await page.getByLabel(/Kata sandi|Password/i).fill(fixtures.userA.password);
+      await page.getByRole("button", { name: /Masuk ke Famora|Sign in to Famora/i }).click();
+      await page.waitForURL(new RegExp(`/f/${fixtures.familyAId}`));
+
+      for (const vp of VIEWPORTS) {
+        await page.setViewportSize({ width: vp.width, height: vp.height });
+        const overflow = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+      }
+
+      await page.setViewportSize({ width: 375, height: 812 });
+      await expect(page.getByRole("navigation", { name: /Navigasi|navigation/i })).toBeVisible();
+      await expect(page.getByText(/Ringkasan Keuangan|Financial Overview/i)).toBeVisible();
+    } finally {
+      await cleanupPhase1Fixtures(fixtures);
+    }
+  });
+});

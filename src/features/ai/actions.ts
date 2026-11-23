@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireAuthenticatedUser } from "@/features/auth/server";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -61,6 +62,7 @@ export async function sendAiPromptAction(input: {
     .select("id", { count: "exact", head: true })
     .eq("family_id", parsed.data.familyId)
     .eq("member_id", actor.id)
+    .eq("status", "ok")
     .gte("created_at", oneHourAgo);
 
   const rate = checkAiRateLimit(usageCount ?? 0, AI_RATE_LIMIT_PER_HOUR);
@@ -94,15 +96,30 @@ export async function sendAiPromptAction(input: {
       return { ok: false, error: convErr?.message ?? "Could not start chat." };
     }
     conversationId = conv.id;
+  } else {
+    const { data: existingConv } = await supabase
+      .from("ai_conversations")
+      .select("id")
+      .eq("id", conversationId)
+      .eq("family_id", parsed.data.familyId)
+      .eq("member_id", actor.id)
+      .maybeSingle<{ id: string }>();
+
+    if (!existingConv) {
+      return { ok: false, error: "Conversation not found." };
+    }
   }
 
-  await supabase.from("ai_messages").insert({
+  const { error: userMsgErr } = await supabase.from("ai_messages").insert({
     family_id: parsed.data.familyId,
     conversation_id: conversationId,
     member_id: actor.id,
     role: "user",
     content: parsed.data.prompt,
   });
+  if (userMsgErr) {
+    return { ok: false, error: userMsgErr.message };
+  }
 
   const context = await retrieveAuthorizedFamilyContext({
     familyId: parsed.data.familyId,
@@ -163,11 +180,19 @@ export async function sendAiPromptAction(input: {
   };
 }
 
+const aiMessageActionSchema = z.object({
+  familyId: z.string().uuid(),
+  messageId: z.string().uuid(),
+});
+
 export async function confirmAiProposedAction(input: {
   familyId: string;
   messageId: string;
 }) {
-  const { supabase, actor, permSet } = await getAiActor(input.familyId);
+  const parsed = aiMessageActionSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid action request." };
+
+  const { supabase, actor, permSet } = await getAiActor(parsed.data.familyId);
   if (!actor || !permSet.has("ai.assistant.use")) {
     return { ok: false, error: "Unauthorized." };
   }
@@ -175,8 +200,8 @@ export async function confirmAiProposedAction(input: {
   const { data: msg } = await supabase
     .from("ai_messages")
     .select("id, proposed_action, action_status")
-    .eq("id", input.messageId)
-    .eq("family_id", input.familyId)
+    .eq("id", parsed.data.messageId)
+    .eq("family_id", parsed.data.familyId)
     .eq("member_id", actor.id)
     .maybeSingle<{
       id: string;
@@ -193,10 +218,25 @@ export async function confirmAiProposedAction(input: {
     return { ok: false, error: "Restricted action cannot be executed by AI." };
   }
 
+  if (msg.proposed_action.actionType === "create_shopping_items" && !permSet.has("shopping.manage")) {
+    return { ok: false, error: "Missing permission: shopping.manage" };
+  }
+
+  const { data: claimed, error: claimErr } = await supabase
+    .from("ai_messages")
+    .update({ action_status: "confirmed" })
+    .eq("id", msg.id)
+    .eq("family_id", parsed.data.familyId)
+    .eq("member_id", actor.id)
+    .eq("action_status", "pending_confirmation")
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (claimErr || !claimed) {
+    return { ok: false, error: claimErr?.message ?? "No pending action found." };
+  }
+
   if (msg.proposed_action.actionType === "create_shopping_items") {
-    if (!permSet.has("shopping.manage")) {
-      return { ok: false, error: "Missing permission: shopping.manage" };
-    }
     const items =
       (msg.proposed_action.payload.items as Array<{
         name: string;
@@ -207,7 +247,7 @@ export async function confirmAiProposedAction(input: {
     if (items.length > 0) {
       const { error: insertErr } = await supabase.from("shopping_items").insert(
         items.map((item) => ({
-          family_id: input.familyId,
+          family_id: parsed.data.familyId,
           added_by_member_id: actor.id,
           name: item.name,
           category: item.category || "Groceries",
@@ -219,13 +259,8 @@ export async function confirmAiProposedAction(input: {
     }
   }
 
-  await supabase
-    .from("ai_messages")
-    .update({ action_status: "confirmed" })
-    .eq("id", msg.id);
-
-  revalidatePath(routes.familyDomain(input.familyId, "ai"));
-  revalidatePath(routes.familyDomain(input.familyId, "shopping"));
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "ai"));
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
   return { ok: true };
 }
 
@@ -233,15 +268,21 @@ export async function cancelAiProposedAction(input: {
   familyId: string;
   messageId: string;
 }) {
-  const { supabase, actor } = await getAiActor(input.familyId);
+  const parsed = aiMessageActionSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid action request." };
+
+  const { supabase, actor } = await getAiActor(parsed.data.familyId);
   if (!actor) return { ok: false, error: "Unauthorized." };
 
-  await supabase
+  const { error } = await supabase
     .from("ai_messages")
     .update({ action_status: "cancelled" })
-    .eq("id", input.messageId)
+    .eq("id", parsed.data.messageId)
+    .eq("family_id", parsed.data.familyId)
     .eq("member_id", actor.id);
 
-  revalidatePath(routes.familyDomain(input.familyId, "ai"));
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "ai"));
   return { ok: true };
 }

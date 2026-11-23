@@ -19,7 +19,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
+import { BottomSheet, Dialog } from "@/components/ui/dialog";
 import { Dropdown, type DropdownItem } from "@/components/ui/dropdown";
 import { EmptyState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
@@ -408,8 +408,8 @@ export function MembersDirectoryView({
         </div>
       )}
 
-      {/* Invite Dialog */}
-      <Dialog
+      {/* Invite BottomSheet (bottom sheet on mobile, centered dialog on desktop) */}
+      <BottomSheet
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
         title={t("members.inviteDialogTitle")}
@@ -475,7 +475,7 @@ export function MembersDirectoryView({
             </div>
           </form>
         )}
-      </Dialog>
+      </BottomSheet>
 
       {/* Confirmation Dialog */}
       <Dialog

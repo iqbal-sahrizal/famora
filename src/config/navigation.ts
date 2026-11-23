@@ -31,18 +31,19 @@ export interface NavItemConfig {
   group: "daily" | "household" | "family" | "system";
   icon: LucideIcon;
   mobilePrimary?: boolean;
+  mobileLabelKey?: "nav.mobile.home" | "nav.mobile.calendar" | "nav.mobile.tasks" | "nav.mobile.finance";
 }
 
 export const DOMAIN_NAV_ITEMS: NavItemConfig[] = [
-  { id: "dashboard", label: "Dashboard", group: "daily", icon: LayoutDashboard, mobilePrimary: true },
-  { id: "calendar", label: "Calendar", group: "daily", icon: Calendar, mobilePrimary: true },
-  { id: "tasks", label: "Tasks & Chores", group: "daily", icon: CheckSquare, mobilePrimary: true },
+  { id: "dashboard", label: "Dashboard", group: "daily", icon: LayoutDashboard, mobilePrimary: true, mobileLabelKey: "nav.mobile.home" },
+  { id: "calendar", label: "Calendar", group: "daily", icon: Calendar, mobilePrimary: true, mobileLabelKey: "nav.mobile.calendar" },
+  { id: "tasks", label: "Tasks & Chores", group: "daily", icon: CheckSquare, mobilePrimary: true, mobileLabelKey: "nav.mobile.tasks" },
   { id: "chores", label: "Chores & Rewards", group: "daily", icon: Award },
-  { id: "shopping", label: "Shopping", group: "daily", icon: ShoppingBag, mobilePrimary: true },
+  { id: "shopping", label: "Shopping", group: "daily", icon: ShoppingBag },
   { id: "noticeboard", label: "Noticeboard", group: "daily", icon: Megaphone },
   { id: "chat", label: "Family Chat", group: "daily", icon: MessageCircle },
 
-  { id: "finance", label: "Finance", group: "household", icon: Wallet },
+  { id: "finance", label: "Finance", group: "household", icon: Wallet, mobilePrimary: true, mobileLabelKey: "nav.mobile.finance" },
   { id: "budgets", label: "Budgets & Bills", group: "household", icon: PieChart },
   { id: "analytics", label: "Analytics & Goals", group: "household", icon: BarChart3 },
   { id: "meals", label: "Meal Planning", group: "household", icon: UtensilsCrossed },

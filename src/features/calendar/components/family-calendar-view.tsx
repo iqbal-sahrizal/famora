@@ -107,6 +107,12 @@ export function FamilyCalendarView({
   const [viewMode, setViewMode] = React.useState<ViewMode>("month");
 
   React.useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+      setViewMode("agenda");
+    }
+  }, []);
+
+  React.useEffect(() => {
     if (isOnline && data.events) {
       void writeOfflineCache(familyId, "calendar", data);
     }
@@ -387,73 +393,76 @@ export function FamilyCalendarView({
 
       {/* Month & Week Grid Views */}
       {(viewMode === "month" || viewMode === "week") && (
-        <Card className="overflow-hidden p-3 sm:p-4">
-          <div className="grid grid-cols-7 gap-1 pb-2 text-center text-[12px] font-semibold text-[var(--text-muted)]">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-              <div key={d} className="py-1">
-                {d}
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1.5">
-            {gridDays.map((day) => {
-              const dayEvents = eventsOnDay(day);
-              const isToday =
-                toDateInputValue(day) === toDateInputValue(new Date());
-              const isCurrentMonth =
-                day.getMonth() === anchorDate.getMonth();
-              return (
-                <div
-                  key={day.toISOString()}
-                  onClick={() => {
-                    if (data.canManage) openNewEditor(day);
-                  }}
-                  className={cn(
-                    "min-h-[86px] sm:min-h-[108px] rounded-2xl p-2 transition-colors border border-transparent",
-                    isCurrentMonth || viewMode === "week"
-                      ? "bg-[var(--bg-subtle)]/55 hover:bg-[var(--bg-subtle)]"
-                      : "bg-transparent opacity-45",
-                    isToday && "border-[var(--accent-primary)] bg-[var(--tint-sage)]/25",
-                    data.canManage && "cursor-pointer"
-                  )}
-                >
-                  <div className="mb-1 flex items-center justify-between">
-                    <span
-                      className={cn(
-                        "inline-flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-semibold tabular-nums",
-                        isToday &&
-                          "bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]"
-                      )}
-                    >
-                      {day.getDate()}
-                    </span>
+        <Card className="overflow-x-auto p-3 sm:p-4">
+          <div className="min-w-[560px]">
+            <div className="grid grid-cols-7 gap-1 pb-2 text-center text-[12px] font-semibold text-[var(--text-muted)]">
+              {t("calendar.weekdaysShort")
+                .split(",")
+                .map((d) => (
+                  <div key={d} className="py-1">
+                    {d}
                   </div>
-                  <div className="space-y-1">
-                    {dayEvents.slice(0, 3).map((ev) => (
+                ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1.5">
+              {gridDays.map((day) => {
+                const dayEvents = eventsOnDay(day);
+                const isToday =
+                  toDateInputValue(day) === toDateInputValue(new Date());
+                const isCurrentMonth =
+                  day.getMonth() === anchorDate.getMonth();
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className={cn(
+                      "min-h-[86px] sm:min-h-[108px] rounded-2xl p-2 transition-colors border border-transparent",
+                      isCurrentMonth || viewMode === "week"
+                        ? "bg-[var(--bg-subtle)]/55 hover:bg-[var(--bg-subtle)]"
+                        : "bg-transparent opacity-45",
+                      isToday && "border-[var(--accent-primary)] bg-[var(--tint-sage)]/25"
+                    )}
+                  >
+                    <div className="mb-1 flex items-center justify-between">
                       <button
-                        key={ev.occurrenceKey}
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedEvent(ev);
+                        disabled={!data.canManage}
+                        onClick={() => {
+                          if (data.canManage) openNewEditor(day);
                         }}
                         className={cn(
-                          "block w-full truncate rounded-lg px-2 py-1 text-left text-[11px] font-medium cursor-pointer",
-                          COLOR_STYLES[ev.colorToken]
+                          "inline-flex h-8 w-8 items-center justify-center rounded-full text-[12px] font-semibold tabular-nums",
+                          isToday &&
+                            "bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]",
+                          data.canManage && "hover:bg-[var(--bg-hover)] cursor-pointer"
                         )}
                       >
-                        {ev.title}
+                        {day.getDate()}
                       </button>
-                    ))}
-                    {dayEvents.length > 3 && (
-                      <p className="px-1 text-[10.5px] font-medium text-[var(--text-secondary)]">
-                        +{dayEvents.length - 3} more
-                      </p>
-                    )}
+                    </div>
+                    <div className="space-y-1">
+                      {dayEvents.slice(0, 3).map((ev) => (
+                        <button
+                          key={ev.occurrenceKey}
+                          type="button"
+                          onClick={() => setSelectedEvent(ev)}
+                          className={cn(
+                            "block min-h-[28px] w-full truncate rounded-lg px-2 py-1 text-left text-[11px] font-medium cursor-pointer",
+                            COLOR_STYLES[ev.colorToken]
+                          )}
+                        >
+                          {ev.title}
+                        </button>
+                      ))}
+                      {dayEvents.length > 3 && (
+                        <p className="px-1 text-[10.5px] font-medium text-[var(--text-secondary)]">
+                          {t("calendar.moreEvents", { count: dayEvents.length - 3 })}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </Card>
       )}
@@ -610,17 +619,18 @@ export function FamilyCalendarView({
                 onClick={() => handleRsvp(selectedEvent.id, "declined")}
               >
                 <X className="h-4 w-4" />
-                Decline
+                {t("calendar.rsvpDecline")}
               </Button>
               {data.canManage && (
                 <>
                   <Button
                     variant="secondary"
                     size="sm"
+                    disabled={busy}
                     onClick={() => openEditEditor(selectedEvent)}
                   >
                     <Edit3 className="h-4 w-4" />
-                    Edit
+                    {t("calendar.editBtn")}
                   </Button>
                   <Button
                     variant="danger"
@@ -629,7 +639,7 @@ export function FamilyCalendarView({
                     onClick={() => handleCancelEvent(selectedEvent.id)}
                   >
                     <Trash2 className="h-4 w-4" />
-                    Cancel Event
+                    {t("calendar.cancelEventBtn")}
                   </Button>
                 </>
               )}
@@ -643,8 +653,9 @@ export function FamilyCalendarView({
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
         title={editingId ? t("calendar.editEventTitle") : t("calendar.newEventTitle")}
+        fullHeight
       >
-        <form onSubmit={handleSave} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        <form onSubmit={handleSave} className="space-y-4">
           <Input
             label={t("calendar.eventTitleLabel")}
             required
@@ -681,7 +692,7 @@ export function FamilyCalendarView({
             )}
           </div>
 
-          <label className="flex items-center gap-2 text-[13.5px] font-medium cursor-pointer">
+          <label className="flex min-h-11 items-center gap-2.5 text-[13.5px] font-medium cursor-pointer sm:min-h-0">
             <input
               type="checkbox"
               checked={allDay}
@@ -779,7 +790,7 @@ export function FamilyCalendarView({
                         )
                       }
                       className={cn(
-                        "rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors cursor-pointer",
+                        "min-h-11 rounded-full px-3.5 py-2 text-[12.5px] font-medium transition-colors cursor-pointer sm:min-h-0 sm:px-3 sm:py-1",
                         selected
                           ? "bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]"
                           : "bg-[var(--bg-subtle)] text-[var(--text-secondary)]"

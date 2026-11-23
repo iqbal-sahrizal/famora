@@ -62,6 +62,7 @@ export async function getNotificationsPageData(
         )
         .eq("family_id", familyId)
         .eq("recipient_member_id", actor.id)
+        .lte("scheduled_for", new Date().toISOString())
         .order("created_at", { ascending: false })
         .limit(80),
       supabase

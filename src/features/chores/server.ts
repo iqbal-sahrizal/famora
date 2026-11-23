@@ -134,6 +134,24 @@ export async function getChoresPageData(
     const memberMap = new Map(members.map((m) => [m.id, m.displayName]));
     const currentMember = members.find((m) => m.userId === userId) ?? null;
 
+    // Fetch full balance for currentMember (not capped at 40) + any pending approvals not in latest 30
+    const [{ data: myFullLedger }, { data: pendingSubsData }] =
+      await Promise.all([
+        currentMember
+          ? supabase
+              .from("reward_points_ledger")
+              .select("delta_points")
+              .eq("family_id", familyId)
+              .eq("member_id", currentMember.id)
+          : Promise.resolve({ data: [] as Array<{ delta_points: number }> }),
+        supabase
+          .from("chore_submissions")
+          .select("id, member_id, title, points_value, note, status, created_at")
+          .eq("family_id", familyId)
+          .eq("status", "pending_approval")
+          .order("created_at", { ascending: false }),
+      ]);
+
     const rawLedger = (ledgerData ?? []) as Array<{
       id: string;
       member_id: string;
@@ -144,10 +162,39 @@ export async function getChoresPageData(
     }>;
 
     const myPointsBalance = currentMember
-      ? rawLedger
-          .filter((l) => l.member_id === currentMember.id)
-          .reduce((sum, l) => sum + l.delta_points, 0)
+      ? ((myFullLedger ?? []) as Array<{ delta_points: number }>).reduce(
+          (sum, l) => sum + l.delta_points,
+          0
+        )
       : 0;
+
+    const mergedSubmissionsMap = new Map<
+      string,
+      {
+        id: string;
+        member_id: string;
+        title: string;
+        points_value: number;
+        note: string;
+        status: "pending_approval" | "approved" | "needs_retry";
+        created_at: string;
+      }
+    >();
+    for (const s of [...(pendingSubsData ?? []), ...(submissionsData ?? [])]) {
+      mergedSubmissionsMap.set(
+        s.id,
+        s as {
+          id: string;
+          member_id: string;
+          title: string;
+          points_value: number;
+          note: string;
+          status: "pending_approval" | "approved" | "needs_retry";
+          created_at: string;
+        }
+      );
+    }
+    const mergedSubmissions = Array.from(mergedSubmissionsMap.values());
 
     return {
       currentMemberId: currentMember?.id ?? null,
@@ -166,7 +213,7 @@ export async function getChoresPageData(
           ? memberMap.get(t.assigned_member_id) ?? null
           : null,
       })),
-      submissions: (submissionsData ?? []).map((s) => ({
+      submissions: mergedSubmissions.map((s) => ({
         id: s.id,
         memberId: s.member_id,
         memberName: memberMap.get(s.member_id) ?? "Member",

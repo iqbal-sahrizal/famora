@@ -71,7 +71,11 @@ export function FamilyTasksView({
   const [priorityFilter, setPriorityFilter] = React.useState("all");
   const [assigneeFilter, setAssigneeFilter] = React.useState("all");
 
-  const [selectedTask, setSelectedTask] = React.useState<TaskItemView | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = React.useState<string | null>(null);
+  const selectedTask = React.useMemo(
+    () => (selectedTaskId ? data.tasks.find((t) => t.id === selectedTaskId) ?? null : null),
+    [data.tasks, selectedTaskId]
+  );
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [commentText, setCommentText] = React.useState("");
@@ -141,7 +145,7 @@ export function FamilyTasksView({
     setAssignees(task.assignees.map((a) => a.memberId));
     setSubtaskDraft("");
     setSyncToCalendar(false);
-    setSelectedTask(null);
+    setSelectedTaskId(null);
     setEditorOpen(true);
   };
 
@@ -242,7 +246,8 @@ export function FamilyTasksView({
       subtaskId,
       isCompleted: !current,
     });
-    if (res.ok) router.refresh();
+    if (!res.ok) toast.error(te(res.error));
+    else router.refresh();
   };
 
   const handlePostComment = async (e: React.FormEvent) => {
@@ -288,7 +293,7 @@ export function FamilyTasksView({
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
-      setSelectedTask(null);
+      setSelectedTaskId(null);
       toast.success(t("tasks.deletedToast"));
       router.refresh();
     }
@@ -359,6 +364,7 @@ export function FamilyTasksView({
               { value: "school", label: t("tasks.cat.school") },
               { value: "errands", label: t("tasks.cat.errands") },
               { value: "health", label: t("tasks.cat.health") },
+              { value: "other", label: t("tasks.cat.other") },
             ]}
           />
           <Select
@@ -414,19 +420,23 @@ export function FamilyTasksView({
                     type="button"
                     aria-label={done ? t("tasks.reopenAria") : t("tasks.completeAria")}
                     onClick={() => handleQuickToggle(task)}
-                    className={cn(
-                      "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors cursor-pointer",
-                      done
-                        ? "border-[var(--accent-primary)] bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]"
-                        : "border-[var(--border-strong)] hover:border-[var(--accent-primary)]"
-                    )}
+                    className="-ml-2 -mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full sm:ml-0 sm:mt-0.5 sm:h-7 sm:w-7 cursor-pointer"
                   >
-                    {done && <Check className="h-3.5 w-3.5" />}
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors",
+                        done
+                          ? "border-[var(--accent-primary)] bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]"
+                          : "border-[var(--border-strong)] hover:border-[var(--accent-primary)]"
+                      )}
+                    >
+                      {done && <Check className="h-3.5 w-3.5" />}
+                    </span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setSelectedTask(task)}
+                    onClick={() => setSelectedTaskId(task.id)}
                     className="min-w-0 text-left cursor-pointer"
                   >
                     <p
@@ -490,7 +500,7 @@ export function FamilyTasksView({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSelectedTask(task)}
+                    onClick={() => setSelectedTaskId(task.id)}
                   >
                     {t("tasks.detailsBtn")}
                   </Button>
@@ -504,11 +514,11 @@ export function FamilyTasksView({
       {/* Task Detail Sheet */}
       <BottomSheet
         open={Boolean(selectedTask)}
-        onClose={() => setSelectedTask(null)}
+        onClose={() => setSelectedTaskId(null)}
         title={selectedTask?.title ?? t("tasks.detailsTitle")}
       >
         {selectedTask && (
-          <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
+          <div className="space-y-5">
             {selectedTask.description && (
               <p className="rounded-2xl bg-[var(--bg-subtle)] p-3.5 text-[13.5px]">
                 {selectedTask.description}
@@ -524,7 +534,7 @@ export function FamilyTasksView({
                 {selectedTask.subtasks.map((sub) => (
                   <label
                     key={sub.id}
-                    className="flex items-center gap-2.5 rounded-xl bg-[var(--bg-subtle)] px-3.5 py-2 text-[13.5px] cursor-pointer"
+                    className="flex min-h-11 sm:min-h-0 items-center gap-2.5 rounded-xl bg-[var(--bg-subtle)] px-3.5 py-2 text-[13.5px] cursor-pointer"
                   >
                     <input
                       type="checkbox"
@@ -548,7 +558,7 @@ export function FamilyTasksView({
                 <p className="text-[12.5px] font-semibold text-[var(--text-muted)]">
                   {t("tasks.attachmentsHeading", { count: selectedTask.attachments.length })}
                 </p>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-medium text-[var(--accent-primary)] hover:underline">
+                <label className="inline-flex min-h-11 sm:min-h-0 cursor-pointer items-center gap-1.5 text-[12.5px] font-medium text-[var(--accent-primary)] hover:underline">
                   <Paperclip className="h-3.5 w-3.5" />
                   {t("tasks.addFileBtn")}
                   <input
@@ -644,10 +654,11 @@ export function FamilyTasksView({
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
         title={editingId ? t("tasks.editTaskTitle") : t("tasks.createTaskTitle")}
+        fullHeight
       >
         <form
           onSubmit={handleSaveTask}
-          className="space-y-4 max-h-[75vh] overflow-y-auto pr-1"
+          className="space-y-4"
         >
           <Input
             label={t("tasks.taskTitleLabel")}
@@ -748,7 +759,7 @@ export function FamilyTasksView({
                         )
                       }
                       className={cn(
-                        "rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors cursor-pointer",
+                        "inline-flex min-h-11 sm:min-h-0 items-center rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors cursor-pointer",
                         selected
                           ? "bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]"
                           : "bg-[var(--bg-subtle)] text-[var(--text-secondary)]"
@@ -763,7 +774,7 @@ export function FamilyTasksView({
           )}
 
           {dueDateStr && (
-            <label className="flex items-center gap-2 text-[13.5px] font-medium cursor-pointer">
+            <label className="flex min-h-11 sm:min-h-0 items-center gap-2.5 text-[13.5px] font-medium cursor-pointer">
               <input
                 type="checkbox"
                 checked={syncToCalendar}

@@ -34,8 +34,10 @@ import {
   addShoppingItemAction,
   applyShoppingTemplateAction,
   createShoppingListAction,
+  deleteShoppingItemAction,
   deleteShoppingListAction,
   toggleShoppingCheckAction,
+  updateShoppingItemAction,
   updateShoppingListAction,
   updateShoppingQuantityAction,
 } from "../actions";
@@ -79,6 +81,20 @@ export function FamilyShoppingView({
     name: string;
     itemCount: number;
   } | null>(null);
+
+  const [itemsState, setItemsState] = React.useState(data.items);
+  React.useEffect(() => {
+    setItemsState(data.items);
+  }, [data.items]);
+
+  type ShoppingItem = ShoppingPageData["items"][number];
+  const [editingItem, setEditingItem] = React.useState<ShoppingItem | null>(null);
+  const [editItemName, setEditItemName] = React.useState("");
+  const [editItemQty, setEditItemQty] = React.useState("1");
+  const [editItemUnit, setEditItemUnit] = React.useState("pcs");
+  const [editItemCategory, setEditItemCategory] = React.useState("Groceries");
+  const [editItemPrice, setEditItemPrice] = React.useState("");
+  const [editItemNotes, setEditItemNotes] = React.useState("");
 
   const selectedList = React.useMemo(
     () => data.lists.find((l) => l.id === selectedListId) ?? null,
@@ -157,11 +173,13 @@ export function FamilyShoppingView({
   }, [familyId, isOnline, router, t]);
 
   const visibleItems = React.useMemo(() => {
-    if (!selectedListId) return data.items;
-    return data.items.filter(
-      (i) => i.listId === selectedListId || i.listId === null
-    );
-  }, [data.items, selectedListId]);
+    if (!selectedListId) return itemsState;
+    return itemsState.filter((i) => i.listId === selectedListId);
+  }, [itemsState, selectedListId]);
+
+  const checkedCount = visibleItems.filter((i) => i.isChecked).length;
+  const totalCount = visibleItems.length;
+  const progressPct = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
 
   const remainingCents = visibleItems
     .filter((i) => !i.isChecked)
@@ -208,6 +226,9 @@ export function FamilyShoppingView({
 
   const handleToggleCheck = async (itemId: string, current: boolean) => {
     if (!isOnline) {
+      setItemsState((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, isChecked: !current } : it))
+      );
       await enqueueShoppingMutation(
         createQueuedShoppingMutation(familyId, "toggle_check", {
           itemId,
@@ -218,13 +239,21 @@ export function FamilyShoppingView({
       return;
     }
 
+    const previous = itemsState;
+    setItemsState((prev) =>
+      prev.map((it) => (it.id === itemId ? { ...it, isChecked: !current } : it))
+    );
     const res = await toggleShoppingCheckAction({
       familyId,
       itemId,
       isChecked: !current,
     });
-    if (!res.ok) toast.error(te(res.error));
-    else router.refresh();
+    if (!res.ok) {
+      setItemsState(previous);
+      toast.error(te(res.error));
+    } else {
+      router.refresh();
+    }
   };
 
   const handleStepQuantity = async (
@@ -232,14 +261,81 @@ export function FamilyShoppingView({
     currentQty: string,
     delta: -1 | 1
   ) => {
-    const parsedNum = parseInt(currentQty, 10);
+    const match = currentQty.trim().match(/^(\d+(?:\.\d+)?)(.*)$/);
+    const parsedNum = match ? Number(match[1]) : parseInt(currentQty, 10);
+    const suffix = match ? match[2] : "";
     const nextNum = Math.max(1, (Number.isNaN(parsedNum) ? 1 : parsedNum) + delta);
+    const nextQty = `${nextNum}${suffix}`;
+
+    const previous = itemsState;
+    setItemsState((prev) =>
+      prev.map((it) => (it.id === itemId ? { ...it, quantity: nextQty } : it))
+    );
     const res = await updateShoppingQuantityAction({
       familyId,
       itemId,
-      quantity: String(nextNum),
+      quantity: nextQty,
     });
-    if (res.ok) router.refresh();
+    if (!res.ok) {
+      setItemsState(previous);
+      toast.error(te(res.error));
+    } else {
+      router.refresh();
+    }
+  };
+
+  const openEditItem = (item: ShoppingItem) => {
+    setEditingItem(item);
+    setEditItemName(item.name);
+    setEditItemQty(item.quantity);
+    setEditItemUnit(item.unit || "pcs");
+    setEditItemCategory(item.category || "Groceries");
+    setEditItemPrice(
+      item.estimatedPriceCents > 0 ? (item.estimatedPriceCents / 100).toFixed(2) : ""
+    );
+    setEditItemNotes(item.notes ?? "");
+  };
+
+  const handleUpdateItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem || !editItemName.trim()) return;
+    const priceFloat = Number.parseFloat(editItemPrice);
+    const priceCents = Number.isFinite(priceFloat) && priceFloat > 0 ? Math.round(priceFloat * 100) : 0;
+
+    setBusy(true);
+    const res = await updateShoppingItemAction({
+      familyId,
+      itemId: editingItem.id,
+      name: editItemName.trim(),
+      category: editItemCategory.trim() || "Groceries",
+      quantity: editItemQty.trim() || "1",
+      unit: editItemUnit.trim() || "pcs",
+      estimatedPriceCents: priceCents,
+      notes: editItemNotes.trim(),
+    });
+    setBusy(false);
+
+    if (!res.ok) toast.error(te(res.error));
+    else {
+      setEditingItem(null);
+      router.refresh();
+    }
+  };
+
+  const handleDeleteItem = async () => {
+    if (!editingItem) return;
+    setBusy(true);
+    const res = await deleteShoppingItemAction({
+      familyId,
+      itemId: editingItem.id,
+    });
+    setBusy(false);
+
+    if (!res.ok) toast.error(te(res.error));
+    else {
+      setEditingItem(null);
+      router.refresh();
+    }
   };
 
   const handleCreateList = async (e: React.FormEvent) => {
@@ -347,13 +443,13 @@ export function FamilyShoppingView({
             type="button"
             onClick={() => setSelectedListId(null)}
             className={cn(
-              "rounded-full px-4 py-2 text-[13px] font-medium transition-colors cursor-pointer",
+              "inline-flex min-h-11 sm:min-h-0 items-center rounded-full px-4 py-2 text-[13px] font-medium transition-colors cursor-pointer",
               selectedListId === null
                 ? "bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]"
                 : "bg-[var(--bg-subtle)] text-[var(--text-secondary)]"
             )}
           >
-            {t("shopping.allItems", { count: data.items.length })}
+            {t("shopping.allItems", { count: itemsState.length })}
           </button>
           {data.lists.map((l) => (
             <button
@@ -361,7 +457,7 @@ export function FamilyShoppingView({
               type="button"
               onClick={() => setSelectedListId(l.id)}
               className={cn(
-                "rounded-full px-4 py-2 text-[13px] font-medium transition-colors cursor-pointer",
+                "inline-flex min-h-11 sm:min-h-0 items-center rounded-full px-4 py-2 text-[13px] font-medium transition-colors cursor-pointer",
                 selectedListId === l.id
                   ? "bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]"
                   : "bg-[var(--bg-subtle)] text-[var(--text-secondary)]"
@@ -416,6 +512,22 @@ export function FamilyShoppingView({
           </div>
         )}
       </div>
+
+      {/* Progress bar */}
+      {totalCount > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[12.5px] font-medium text-[var(--text-secondary)] tabular-nums">
+            <span>{t("shopping.progressLabel", { done: checkedCount, total: totalCount })}</span>
+            <span>{progressPct}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
+            <div
+              className="h-full rounded-full bg-[var(--accent-primary)] transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Fast Inline Add Bar */}
       {data.canManage && (
@@ -512,6 +624,11 @@ export function FamilyShoppingView({
                     </p>
                     <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-[var(--text-secondary)]">
                       <Badge variant="neutral">{item.category}</Badge>
+                      {item.estimatedPriceCents > 0 && (
+                        <span className="tabular-nums font-medium">
+                          {formatCurrency(item.estimatedPriceCents, data.currencyCode, toIntlLocale(locale))}
+                        </span>
+                      )}
                       {item.addedByName && <span>Added by {item.addedByName}</span>}
                       {item.assignedShopperName && (
                         <span className="inline-flex items-center gap-1 text-[var(--accent-primary)] font-medium">
@@ -523,7 +640,7 @@ export function FamilyShoppingView({
                   </div>
                 </button>
 
-                {/* Mobile-Friendly Quantity Stepper */}
+                {/* Mobile-Friendly Quantity Stepper + Edit */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
@@ -532,7 +649,7 @@ export function FamilyShoppingView({
                     onClick={() =>
                       handleStepQuantity(item.id, item.quantity, -1)
                     }
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] cursor-pointer"
+                    className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] cursor-pointer"
                   >
                     <Minus className="h-3.5 w-3.5" />
                   </button>
@@ -546,10 +663,20 @@ export function FamilyShoppingView({
                     onClick={() =>
                       handleStepQuantity(item.id, item.quantity, 1)
                     }
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] cursor-pointer"
+                    className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
+                  {data.canManage && (
+                    <button
+                      type="button"
+                      aria-label={`${t("common.edit")} ${item.name}`}
+                      onClick={() => openEditItem(item)}
+                      className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </Card>
             ))
@@ -580,13 +707,18 @@ export function FamilyShoppingView({
                     <Button
                       size="sm"
                       variant="tonal"
+                      disabled={busy}
                       onClick={async () => {
+                        setBusy(true);
                         const r = await applyShoppingTemplateAction({
                           familyId,
                           listId: selectedListId,
                           templateId: tpl.id,
                         });
-                        if (r.ok) {
+                        setBusy(false);
+                        if (!r.ok) {
+                          toast.error(te(r.error));
+                        } else {
                           toast.success(t("shopping.toast.templateAdded", { name: tpl.name }));
                           router.refresh();
                         }
@@ -617,7 +749,9 @@ export function FamilyShoppingView({
                   <button
                     key={h.id}
                     type="button"
+                    disabled={busy}
                     onClick={async () => {
+                      setBusy(true);
                       const r = await addShoppingItemAction({
                         familyId,
                         listId: selectedListId,
@@ -630,12 +764,15 @@ export function FamilyShoppingView({
                         assignedShopperMemberId: null,
                         clientMutationId: crypto.randomUUID(),
                       });
-                      if (r.ok) {
+                      setBusy(false);
+                      if (!r.ok) {
+                        toast.error(te(r.error));
+                      } else {
                         toast.success(t("shopping.toast.historyAdded", { name: h.itemName }));
                         router.refresh();
                       }
                     }}
-                    className="rounded-full bg-[var(--bg-subtle)] px-3 py-1.5 text-[12.5px] font-medium hover:bg-[var(--tint-sage)] hover:text-[var(--tint-sage-fg)] transition-colors cursor-pointer"
+                    className="inline-flex min-h-11 sm:min-h-0 items-center rounded-full bg-[var(--bg-subtle)] px-3.5 py-2 text-[12.5px] font-medium hover:bg-[var(--tint-sage)] hover:text-[var(--tint-sage-fg)] transition-colors cursor-pointer"
                   >
                     + {h.itemName}
                   </button>
@@ -748,6 +885,71 @@ export function FamilyShoppingView({
           {t("common.cannotUndo")}
         </p>
       </Dialog>
+
+      {/* Edit Shopping Item Sheet */}
+      <BottomSheet
+        open={Boolean(editingItem)}
+        onClose={() => !busy && setEditingItem(null)}
+        title={t("shopping.editItemTitle")}
+      >
+        <form onSubmit={handleUpdateItem} className="space-y-4">
+          <Input
+            label={t("shopping.quickAddPlaceholder")}
+            required
+            value={editItemName}
+            onChange={(e) => setEditItemName(e.target.value)}
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label={t("shopping.qtyPlaceholder")}
+              required
+              value={editItemQty}
+              onChange={(e) => setEditItemQty(e.target.value)}
+            />
+            <Input
+              label={t("shopping.unitLabel")}
+              value={editItemUnit}
+              onChange={(e) => setEditItemUnit(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label={t("shopping.categoryLabel")}
+              value={editItemCategory}
+              onChange={(e) => setEditItemCategory(e.target.value)}
+            />
+            <Input
+              label={t("shopping.priceOptionalLabel")}
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              value={editItemPrice}
+              onChange={(e) => setEditItemPrice(e.target.value)}
+              className="tabular-nums"
+            />
+          </div>
+          <Input
+            label={t("tasks.notesLabel")}
+            value={editItemNotes}
+            onChange={(e) => setEditItemNotes(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button type="submit" className="flex-1" isLoading={busy}>
+              {t("shopping.saveItemBtn")}
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={busy}
+              onClick={handleDeleteItem}
+            >
+              <Trash2 className="h-4 w-4" />
+              {t("shopping.deleteItemBtn")}
+            </Button>
+          </div>
+        </form>
+      </BottomSheet>
     </Section>
   );
 }

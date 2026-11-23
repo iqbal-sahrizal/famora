@@ -19,7 +19,7 @@ import { PageHeader, Section } from "@/components/layout/primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
+import { BottomSheet } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
@@ -674,13 +674,20 @@ export function FamilySettingsView({
       )}
 
       {canDeleteFamily && data.family && (
-        <Dialog
+        <BottomSheet
           open={deleteDialogOpen}
           onClose={() => !deletingFamily && setDeleteDialogOpen(false)}
           title={t("settings.delete.modalTitle")}
           description={t("settings.delete.confirmPrompt", { name: data.family.name })}
-          footer={
-            <>
+        >
+          <div className="space-y-4">
+            <Input
+              label={t("settings.delete.confirmLabel")}
+              placeholder={data.family.name}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+            />
+            <div className="flex flex-wrap justify-end gap-2.5 pt-2">
               <Button
                 type="button"
                 variant="ghost"
@@ -714,16 +721,9 @@ export function FamilySettingsView({
               >
                 {t("settings.delete.confirmBtn")}
               </Button>
-            </>
-          }
-        >
-          <Input
-            label={t("settings.delete.confirmLabel")}
-            placeholder={data.family.name}
-            value={deleteConfirmName}
-            onChange={(e) => setDeleteConfirmName(e.target.value)}
-          />
-        </Dialog>
+            </div>
+          </div>
+        </BottomSheet>
       )}
     </Section>
   );

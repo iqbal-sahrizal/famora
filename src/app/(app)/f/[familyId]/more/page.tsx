@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { ChevronRight, PlusCircle, UserCircle } from "lucide-react";
 import { PageHeader, Section } from "@/components/layout/primitives";
+import { PwaInstallCard } from "@/components/pwa/pwa-install-card";
 import { Card } from "@/components/ui/card";
 import {
   DOMAIN_NAV_ITEMS,
@@ -38,6 +39,8 @@ export default async function FamilyMorePage({
         title={translate(locale, "nav.allFeatures")}
         description={translate(locale, "nav.allFeaturesDesc")}
       />
+
+      <PwaInstallCard familyId={familyId} />
 
       <Section title={translate(locale, "shell.accountProfile")}>
         <Card className="divide-y divide-[var(--border-subtle)] overflow-hidden">

@@ -26,7 +26,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run dev -- -p ${PORT}`,
+    command: process.env.E2E_PROD
+      ? `npm run start -- -p ${PORT}`
+      : `npm run dev -- -p ${PORT}`,
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

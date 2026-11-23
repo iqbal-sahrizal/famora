@@ -90,7 +90,7 @@ export function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1rem+env(safe-area-inset-bottom))]"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -102,7 +102,7 @@ export function Dialog({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="relative z-10 max-h-[88dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-[24px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-[var(--shadow-float)] focus:outline-none"
+        className="relative z-10 max-h-[85dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-[24px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-[var(--shadow-float)] focus:outline-none sm:p-6"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
@@ -122,13 +122,13 @@ export function Dialog({
             type="button"
             onClick={onClose}
             aria-label={t("common.closeDialog")}
-            className="rounded-full p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+            className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         <div>{children}</div>
-        {footer && <div className="mt-6 flex justify-end gap-2.5">{footer}</div>}
+        {footer && <div className="mt-6 flex flex-wrap justify-end gap-2.5">{footer}</div>}
       </div>
     </div>
   );
@@ -138,11 +138,15 @@ export function BottomSheet({
   open,
   onClose,
   title,
+  description,
+  fullHeight = false,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  description?: string;
+  fullHeight?: boolean;
   children: React.ReactNode;
 }) {
   const { t } = useLocale();
@@ -154,7 +158,7 @@ export function BottomSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center pt-[env(safe-area-inset-top)] sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -167,22 +171,30 @@ export function BottomSheet({
         ref={panelRef}
         tabIndex={-1}
         className={cn(
-          "relative z-10 max-h-[88dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[28px] sm:rounded-[24px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-3 shadow-[var(--shadow-float)] focus:outline-none"
+          "relative z-10 w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[28px] sm:rounded-[24px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3 shadow-[var(--shadow-float)] focus:outline-none sm:px-6",
+          fullHeight ? "max-h-[92dvh] sm:max-h-[88dvh]" : "max-h-[88dvh]"
         )}
       >
-        <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--border-strong)] sm:hidden" />
-        <div className="mb-4 flex items-center justify-between">
-          <h2
-            id={titleId}
-            className="font-heading text-[18px] font-semibold text-[var(--text-primary)]"
-          >
-            {title}
-          </h2>
+        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-[var(--border-strong)] sm:hidden" />
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2
+              id={titleId}
+              className="font-heading text-[18px] font-semibold text-[var(--text-primary)]"
+            >
+              {title}
+            </h2>
+            {description && (
+              <p className="mt-1 text-[13.5px] text-[var(--text-secondary)]">
+                {description}
+              </p>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}
             aria-label={t("common.closeSheet")}
-            className="rounded-full p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+            className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>

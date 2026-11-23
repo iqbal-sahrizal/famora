@@ -138,6 +138,19 @@ export async function listOutboxRecords(
   });
 }
 
+export async function clearOfflineCache(): Promise<void> {
+  memoryCacheStore.clear();
+  if (!hasIndexedDb()) return;
+
+  const db = await openPwaDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_CACHE, "readwrite");
+    tx.objectStore(STORE_CACHE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export function clearMemoryPwaStoresForTests(): void {
   memoryCacheStore.clear();
   memoryOutboxStore.clear();

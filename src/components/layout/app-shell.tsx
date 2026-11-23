@@ -25,6 +25,7 @@ import { ThemeToggle } from "@/components/ui/navigation";
 import { logoutAction } from "@/features/auth/actions";
 import type { WorkspaceShellContext } from "@/features/workspace/server";
 import { useActiveFamilyId } from "@/hooks/use-active-family";
+import { clearOfflineCache } from "@/lib/pwa/indexeddb";
 import { translateDomainLabel, translateNavGroup, type Locale } from "@/lib/i18n";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -99,6 +100,7 @@ export function AppShell({
       toast.error(te(res.error, "shell.signOutError"));
       return;
     }
+    await clearOfflineCache().catch(() => undefined);
     setActiveFamilyId(null);
     setLogoutOpen(false);
     router.push(routes.login);
@@ -106,7 +108,7 @@ export function AppShell({
   };
 
   return (
-    <div className="flex min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+    <div className="flex min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-[var(--accent-primary)] focus:px-4 focus:py-2 focus:text-[13px] focus:font-semibold focus:text-[var(--accent-primary-fg)]"
@@ -266,11 +268,11 @@ export function AppShell({
       {/* Main Content Column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top Bar (Mobile Family Switcher + Offline/Sync Status + Account) */}
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/90 px-4 py-3 backdrop-blur-md lg:px-8">
-          <div className="flex min-w-0 items-center gap-2.5">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/90 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-md lg:px-8">
+          <div className="flex min-w-0 items-center gap-2">
             <Link
               href={routes.familyDashboard(familyId)}
-              className="flex shrink-0 items-center gap-2 lg:hidden"
+              className="flex min-h-11 shrink-0 items-center gap-2 lg:hidden"
             >
               <HeartHandshake className="h-5 w-5 text-[var(--accent-primary)]" />
               <span className="font-heading text-[16px] font-bold">Famora</span>
@@ -281,7 +283,7 @@ export function AppShell({
                 disabled={switchingFamily}
                 value={familyId}
                 onChange={(e) => handleFamilySwitch(e.target.value)}
-                className="max-w-[150px] truncate rounded-full border border-[var(--border-subtle)] bg-[var(--bg-subtle)] px-2.5 py-1 text-[12px] font-medium text-[var(--text-secondary)] lg:hidden"
+                className="min-h-11 max-w-[150px] truncate rounded-full border border-[var(--border-subtle)] bg-[var(--bg-subtle)] px-3 py-2 text-[16px] font-medium text-[var(--text-secondary)] sm:text-[13px] lg:hidden"
               >
                 {families.map((fam) => (
                   <option key={fam.familyId} value={fam.familyId}>
@@ -297,13 +299,13 @@ export function AppShell({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <PwaStatusBar familyId={familyId} />
             <div className="flex items-center gap-1 lg:hidden">
               <Link
                 href={routes.account}
                 aria-label={t("shell.accountSettingsAria")}
-                className="rounded-xl p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
               >
                 <UserCircle className="h-5 w-5" />
               </Link>
@@ -312,7 +314,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-12">
+        <main id="main-content" className="flex-1 px-4 py-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8 lg:pb-12">
           <div className="mx-auto max-w-[1280px]">{children}</div>
         </main>
       </div>
@@ -320,42 +322,47 @@ export function AppShell({
       {/* Mobile Bottom Tab Bar */}
       <nav
         aria-label={t("shell.mobileNavAria")}
-        className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 px-2 py-2 backdrop-blur-md lg:hidden"
+        className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/95 px-2 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-md lg:hidden"
       >
         {mobilePrimaryItems.map((item) => {
           const Icon = item.icon;
           const href = routes.familyDomain(familyId, item.id);
           const active = pathname === href;
+          const label = item.mobileLabelKey
+            ? t(item.mobileLabelKey)
+            : translateDomainLabel(item.id, locale);
           return (
             <Link
               key={item.id}
               href={href}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "flex min-w-[56px] flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-medium transition-colors",
+                "flex min-h-[44px] min-w-[56px] flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1 text-[11px] font-medium transition-colors",
                 active
-                  ? "text-[var(--accent-primary)]"
+                  ? "text-[var(--accent-primary)] font-semibold"
                   : "text-[var(--text-secondary)]"
               )}
             >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.75} />
-              <span>{translateDomainLabel(item.id, locale).split(" ")[0]}</span>
+              <Icon className="h-5 w-5" strokeWidth={active ? 2.2 : 1.75} />
+              <span className="leading-tight">{label}</span>
             </Link>
           );
         })}
         <Link
           href={routes.familyMore(familyId)}
+          aria-current={pathname === routes.familyMore(familyId) ? "page" : undefined}
           className={cn(
-            "flex min-w-[56px] flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-medium transition-colors",
+            "flex min-h-[44px] min-w-[56px] flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1 text-[11px] font-medium transition-colors",
             pathname === routes.familyMore(familyId)
-              ? "text-[var(--accent-primary)]"
+              ? "text-[var(--accent-primary)] font-semibold"
               : "text-[var(--text-secondary)]"
           )}
         >
           <LayoutGrid
             className="h-5 w-5"
-            strokeWidth={pathname === routes.familyMore(familyId) ? 2 : 1.75}
+            strokeWidth={pathname === routes.familyMore(familyId) ? 2.2 : 1.75}
           />
-          <span>{t("nav.more")}</span>
+          <span className="leading-tight">{t("nav.more")}</span>
         </Link>
       </nav>
 

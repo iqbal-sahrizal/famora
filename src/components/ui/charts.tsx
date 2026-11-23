@@ -8,43 +8,58 @@ export interface MonthlySpendPoint {
   amountCents: number;
 }
 
-export function SpendBarChart({ data }: { data: MonthlySpendPoint[] }) {
+export function SpendBarChart({
+  data,
+  currencyCode = "USD",
+  locale = "en-US",
+}: {
+  data: MonthlySpendPoint[];
+  currencyCode?: string;
+  locale?: string;
+}) {
   const max = Math.max(...data.map((d) => d.amountCents), 1);
-  const [hovered, setHovered] = React.useState<number | null>(null);
+  const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex h-40 items-end gap-3 pt-4">
+      <div className="flex h-40 items-end gap-3 pt-6">
         {data.map((point, idx) => {
           const heightPct = Math.max(10, Math.round((point.amountCents / max) * 100));
           const isLast = idx === data.length - 1;
-          const isHovered = hovered === idx;
+          const isActive = activeIndex === idx;
           return (
-            <div
+            <button
               key={point.label}
-              onMouseEnter={() => setHovered(idx)}
-              onMouseLeave={() => setHovered(null)}
-              className="group relative flex flex-1 flex-col items-center gap-2"
+              type="button"
+              onMouseEnter={() => setActiveIndex(idx)}
+              onMouseLeave={() => setActiveIndex(null)}
+              onFocus={() => setActiveIndex(idx)}
+              onBlur={() => setActiveIndex(null)}
+              onClick={() => setActiveIndex((prev) => (prev === idx ? null : idx))}
+              aria-label={`${point.label}: ${formatCurrency(point.amountCents, currencyCode, locale)}`}
+              className="group relative flex flex-1 flex-col items-center gap-2 focus:outline-none cursor-pointer"
             >
-              {isHovered && (
-                <div className="absolute -top-7 rounded-lg bg-[var(--text-primary)] px-2 py-1 text-[11px] font-medium text-[var(--bg-canvas)] tabular-nums shadow-sm whitespace-nowrap">
-                  {formatCurrency(point.amountCents)}
+              {isActive && (
+                <div className="absolute -top-7 z-10 rounded-lg bg-[var(--text-primary)] px-2 py-1 text-[11px] font-medium text-[var(--bg-canvas)] tabular-nums shadow-sm whitespace-nowrap">
+                  {formatCurrency(point.amountCents, currencyCode, locale)}
                 </div>
               )}
               <div className="flex h-28 w-full items-end">
                 <div
                   style={{ height: `${heightPct}%` }}
                   className={`w-full rounded-t-xl transition-all duration-300 ${
-                    isLast
+                    isActive
                       ? "bg-[var(--accent-primary)]"
-                      : "bg-[var(--tint-sage)] group-hover:bg-[var(--accent-primary)]/70"
+                      : isLast
+                        ? "bg-[var(--accent-primary)]"
+                        : "bg-[var(--tint-sage)] group-hover:bg-[var(--accent-primary)]/70"
                   }`}
                 />
               </div>
               <span className="text-[11.5px] font-medium text-[var(--text-secondary)]">
                 {point.label}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>

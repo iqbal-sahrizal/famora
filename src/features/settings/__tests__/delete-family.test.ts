@@ -13,10 +13,17 @@ let mockFamily: { id: string; name: string } | null = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   name: "Smith Family",
 };
+let mockDeleteRpcError: { message: string } | null = null;
+let mockFailingBucket: string | null = null;
 const removedBuckets: Array<{ bucket: string; paths: string[] }> = [];
 const mockRpc = vi.fn(async (fn: string) => {
   if (fn === "get_my_family_permissions") {
     return { data: mockPerms, error: null };
+  }
+  if (fn === "delete_family_workspace") {
+    return mockDeleteRpcError
+      ? { data: null, error: mockDeleteRpcError }
+      : { data: true, error: null };
   }
   return { data: true, error: null };
 });
@@ -28,6 +35,9 @@ vi.mock("@/lib/supabase/server", () => ({
       from: vi.fn((bucket: string) => ({
         remove: vi.fn(async (paths: string[]) => {
           removedBuckets.push({ bucket, paths });
+          if (mockFailingBucket === bucket) {
+            return { error: { message: "Storage bucket unavailable" } };
+          }
           return { error: null };
         }),
       })),
@@ -42,7 +52,7 @@ vi.mock("@/lib/supabase/server", () => ({
           }),
         };
       }
-      if (table === "document_files") {
+      if (table === "documents") {
         return {
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockResolvedValue({
@@ -94,6 +104,8 @@ describe("Family Settings — Delete Family Workspace (AUD-004)", () => {
     vi.clearAllMocks();
     mockPerms = [{ permission_key: "family.delete" }];
     mockFamily = { id: FAM_ID, name: "Smith Family" };
+    mockDeleteRpcError = null;
+    mockFailingBucket = null;
     removedBuckets.length = 0;
   });
 
@@ -139,8 +151,31 @@ describe("Family Settings — Delete Family Workspace (AUD-004)", () => {
     expect(removedBuckets).toEqual([
       { bucket: "family-documents", paths: ["fam/doc-1.pdf"] },
       { bucket: "family-memories", paths: ["fam/mem-1.jpg", "fam/mem-1-t.webp"] },
-      { bucket: "family-chat", paths: ["fam/chat-1.png"] },
+      { bucket: "chat-attachments", paths: ["fam/chat-1.png"] },
       { bucket: "family-child-attachments", paths: ["fam/child-1/report.pdf"] },
     ]);
+  });
+
+  it("aborts storage cleanup and surfaces RPC failure when delete_family_workspace fails", async () => {
+    mockDeleteRpcError = { message: "Active family owner membership required" };
+    const res = await deleteFamilyAction({
+      familyId: FAM_ID,
+      confirmationName: "Smith Family",
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("Active family owner membership required");
+    expect(removedBuckets).toEqual([]);
+  });
+
+  it("reports partial storage cleanup failures safely without failing completed deletion", async () => {
+    mockFailingBucket = "chat-attachments";
+    const res = await deleteFamilyAction({
+      familyId: FAM_ID,
+      confirmationName: "Smith Family",
+    });
+
+    expect(res.ok).toBe(true);
+    expect((res as { warning?: string }).warning).toContain("chat-attachments");
   });
 });

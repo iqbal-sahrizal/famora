@@ -37,6 +37,7 @@
   --tint-lavender-fg: #46325C;
   --tint-blush: #F3D9D1;
   --tint-blush-fg: #633226;
+  --tint-sand: #EFECE4;
 
   --status-danger: #C2413B;
   --status-danger-bg: #FBE9E7;
@@ -71,6 +72,7 @@
   --tint-lavender-fg: #D7C3EE;
   --tint-blush: rgba(243, 217, 209, 0.15);
   --tint-blush-fg: #F0C6BA;
+  --tint-sand: rgba(239, 236, 228, 0.14);
 
   --status-danger: #E56B65;
   --status-danger-bg: rgba(229, 107, 101, 0.15);
@@ -87,6 +89,12 @@
     font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    overscroll-behavior-y: contain;
   }
 
   h1, h2, h3, h4, .font-heading {
@@ -96,6 +104,14 @@
 
   * {
     border-color: var(--border-subtle);
+  }
+}
+
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
   }
 }
 

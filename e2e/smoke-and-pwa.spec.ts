@@ -21,7 +21,7 @@ test.describe("Smoke, Auth Guard & PWA Shell Verification", () => {
 
     const sw = await request.get("/sw.js");
     expect(sw.status()).toBe(200);
-    expect(await sw.text()).toContain('const CACHE_VERSION = "v2"');
+    expect(await sw.text()).toContain('const CACHE_VERSION = "v3"');
 
     const offline = await request.get("/offline.html");
     expect(offline.status()).toBe(200);

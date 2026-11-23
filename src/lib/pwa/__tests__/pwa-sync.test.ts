@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearMemoryPwaStoresForTests,
+  clearOfflineCache,
   listOutboxRecords,
   readOfflineCache,
   writeOfflineCache,
@@ -239,5 +240,15 @@ describe("Phase 1 — AUD-001 Retry & AUD-003 Unified Offline Architecture", () 
         serverUpdatedAt: "2026-11-22T10:05:00.000Z",
       }).resolution
     ).toBe("manual_review");
+  });
+
+  it("M6: clears cached family data on logout via clearOfflineCache without cross-account leakage", async () => {
+    await writeOfflineCache("fam-1", "dashboard", { tasksDueToday: 4 });
+    await writeOfflineCache("fam-2", "shopping", { items: ["Milk"] });
+    expect(await readOfflineCache("fam-1", "dashboard")).not.toBeNull();
+
+    await clearOfflineCache();
+    expect(await readOfflineCache("fam-1", "dashboard")).toBeNull();
+    expect(await readOfflineCache("fam-2", "shopping")).toBeNull();
   });
 });

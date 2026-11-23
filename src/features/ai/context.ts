@@ -32,11 +32,11 @@ export async function retrieveAuthorizedFamilyContext(params: {
       .maybeSingle<{ name: string }>(),
     supabase
       .from("calendar_events")
-      .select("title, starts_at")
+      .select("title, start_at")
       .eq("family_id", params.familyId)
-      .gte("starts_at", now.toISOString())
-      .lte("starts_at", in7Days)
-      .order("starts_at", { ascending: true })
+      .gte("start_at", now.toISOString())
+      .lte("start_at", in7Days)
+      .order("start_at", { ascending: true })
       .limit(10),
     supabase
       .from("tasks")
@@ -53,7 +53,7 @@ export async function retrieveAuthorizedFamilyContext(params: {
       .limit(15),
     supabase
       .from("recipes")
-      .select("title, category")
+      .select("title, dietary_tags")
       .eq("family_id", params.familyId)
       .limit(10),
     supabase
@@ -81,12 +81,12 @@ export async function retrieveAuthorizedFamilyContext(params: {
     const [{ data: txRows }, { data: billRows }] = await Promise.all([
       supabase
         .from("finance_transactions")
-        .select("tx_type, amount_cents")
+        .select("kind, amount_numeric, amount_cents")
         .eq("family_id", params.familyId)
         .gte("occurred_on", monthStart),
       supabase
         .from("household_bills")
-        .select("title, due_on, amount_cents")
+        .select("title, due_on, amount_numeric")
         .eq("family_id", params.familyId)
         .eq("status", "unpaid")
         .order("due_on", { ascending: true })
@@ -95,10 +95,17 @@ export async function retrieveAuthorizedFamilyContext(params: {
 
     let monthlyExpenseCents = 0;
     let monthlyIncomeCents = 0;
-    for (const tx of (txRows as Array<{ tx_type: string; amount_cents: number }>) ??
-      []) {
-      if (tx.tx_type === "expense") monthlyExpenseCents += Number(tx.amount_cents ?? 0);
-      if (tx.tx_type === "income") monthlyIncomeCents += Number(tx.amount_cents ?? 0);
+    for (const tx of (txRows as Array<{
+      kind: string;
+      amount_numeric: number | string | null;
+      amount_cents: number | null;
+    }>) ?? []) {
+      const cents =
+        tx.amount_numeric !== null && tx.amount_numeric !== undefined
+          ? Math.round(Number(tx.amount_numeric) * 100)
+          : Number(tx.amount_cents ?? 0);
+      if (tx.kind === "expense") monthlyExpenseCents += cents;
+      if (tx.kind === "income") monthlyIncomeCents += cents;
     }
 
     financeSummary = {
@@ -109,12 +116,12 @@ export async function retrieveAuthorizedFamilyContext(params: {
         (billRows as Array<{
           title: string;
           due_on: string;
-          amount_cents: number;
+          amount_numeric: number | string;
         }>) ?? []
       ).map((b) => ({
         title: b.title,
         dueOn: b.due_on,
-        amountCents: Number(b.amount_cents ?? 0),
+        amountCents: Math.round(Number(b.amount_numeric ?? 0) * 100),
       })),
     };
   }
@@ -123,8 +130,8 @@ export async function retrieveAuthorizedFamilyContext(params: {
     familyName: familyRow?.name ?? "Your Family",
     memberName: params.memberName,
     calendarEvents: (
-      (eventsData as Array<{ title: string; starts_at: string }>) ?? []
-    ).map((e) => ({ title: e.title, startsAt: e.starts_at })),
+      (eventsData as Array<{ title: string; start_at: string }>) ?? []
+    ).map((e) => ({ title: e.title, startsAt: e.start_at })),
     pendingTasks: (
       (tasksData as Array<{
         title: string;
@@ -140,8 +147,9 @@ export async function retrieveAuthorizedFamilyContext(params: {
       }>) ?? []
     ).map((s) => ({ name: s.name, quantity: s.quantity, category: s.category })),
     recipes: (
-      (recipesData as Array<{ title: string; category: string }>) ?? []
-    ).map((r) => ({ title: r.title, category: r.category })),
+      (recipesData as Array<{ title: string; dietary_tags?: string[] | null }>) ??
+      []
+    ).map((r) => ({ title: r.title, category: r.dietary_tags?.[0] ?? "Recipe" })),
     habits: (
       (habitsData as Array<{ title: string; cadence: string }>) ?? []
     ).map((h) => ({ title: h.title, cadence: h.cadence })),

@@ -24,7 +24,7 @@ export function Dropdown({
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    function handleOutside(e: MouseEvent) {
+    function handleOutside(e: MouseEvent | TouchEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
       }
@@ -33,21 +33,37 @@ export function Dropdown({
       if (e.key === "Escape") setOpen(false);
     }
     document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
     document.addEventListener("keydown", handleEsc);
     return () => {
       document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
       document.removeEventListener("keydown", handleEsc);
     };
   }, []);
 
   return (
     <div ref={ref} className="relative inline-block">
-      <div onClick={() => setOpen((v) => !v)}>{trigger}</div>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }
+        }}
+      >
+        {trigger}
+      </div>
       {open && (
         <div
           role="menu"
           className={cn(
-            "absolute z-40 mt-2 min-w-[200px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1.5 shadow-[var(--shadow-float)]",
+            "absolute z-40 mt-2 min-w-[200px] max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1.5 shadow-[var(--shadow-float)]",
             align === "right" ? "right-0" : "left-0"
           )}
         >
@@ -61,7 +77,7 @@ export function Dropdown({
                 setOpen(false);
               }}
               className={cn(
-                "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13.5px] font-medium transition-colors cursor-pointer",
+                "flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13.5px] font-medium transition-colors cursor-pointer sm:min-h-0",
                 item.danger
                   ? "text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)]"
                   : "text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]"

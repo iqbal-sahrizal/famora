@@ -53,31 +53,31 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+    <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       {/* Top Navigation */}
-      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1160px] items-center justify-between px-5 py-4 sm:px-8">
-          <Link href={routes.home} className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1160px] flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-8 sm:py-4">
+          <Link href={routes.home} className="flex min-h-11 items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">
               <HeartHandshake className="h-5 w-5" strokeWidth={1.75} />
             </div>
             <span className="font-heading text-[18px] font-bold">Famora</span>
           </Link>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
             <ThemeToggle />
             <Link
               href={routes.login}
-              className="rounded-xl px-3.5 py-2 text-[13.5px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+              className="inline-flex min-h-11 items-center rounded-xl px-3 py-2 text-[13.5px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
             >
               {translate(locale, "landing.signIn")}
             </Link>
             <Link
               href={routes.signup}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent-primary)] px-4 py-2 text-[13.5px] font-semibold text-[var(--accent-primary-fg)] shadow-xs hover:opacity-95"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--accent-primary)] px-3.5 py-2 text-[13.5px] font-semibold text-[var(--accent-primary-fg)] shadow-xs hover:opacity-95 sm:px-4"
             >
               {translate(locale, "landing.getStarted")}
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-4 w-4 shrink-0" />
             </Link>
           </div>
         </div>

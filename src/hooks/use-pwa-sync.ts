@@ -32,6 +32,9 @@ export function usePwaSync(familyId?: string) {
     React.useState<ServiceWorker | null>(null);
   const [installPrompt, setInstallPrompt] =
     React.useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = React.useState(false);
+  const [installDismissed, setInstallDismissed] = React.useState(false);
+  const reloadingRef = React.useRef(false);
 
   const refreshSummary = React.useCallback(async () => {
     try {
@@ -133,28 +136,67 @@ export function usePwaSync(familyId?: string) {
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as { standalone?: boolean }).standalone === true;
+    setIsInstalled(standalone);
+    try {
+      setInstallDismissed(window.sessionStorage.getItem("famora_install_dismissed") === "1");
+    } catch {
+      // sessionStorage unavailable
+    }
+
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
       setInstallPrompt(e as BeforeInstallPromptEvent);
     };
+    const onAppInstalled = () => {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+    };
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
-    return () =>
+    window.addEventListener("appinstalled", onAppInstalled);
+    return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
   }, []);
 
-  const applyAppUpdate = React.useCallback(() => {
-    if (!waitingWorker) return;
-    waitingWorker.postMessage({ type: "SKIP_WAITING" });
-    window.location.reload();
+  const applyAppUpdate = React.useCallback((): boolean => {
+    if (!waitingWorker || typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+      return false;
+    }
+    try {
+      const onControllerChange = () => {
+        if (reloadingRef.current) return;
+        reloadingRef.current = true;
+        window.location.reload();
+      };
+      navigator.serviceWorker.addEventListener("controllerchange", onControllerChange, {
+        once: true,
+      });
+      waitingWorker.postMessage({ type: "SKIP_WAITING" });
+      return true;
+    } catch {
+      return false;
+    }
   }, [waitingWorker]);
 
-  const promptInstall = React.useCallback(async () => {
-    if (!installPrompt) return;
+  const promptInstall = React.useCallback(async (): Promise<"accepted" | "dismissed" | "unavailable"> => {
+    if (!installPrompt) return "unavailable";
     await installPrompt.prompt();
     const choice = await installPrompt.userChoice;
     if (choice.outcome === "accepted") {
       setInstallPrompt(null);
+      return "accepted";
     }
+    setInstallDismissed(true);
+    try {
+      window.sessionStorage.setItem("famora_install_dismissed", "1");
+    } catch {
+      // ignore
+    }
+    return "dismissed";
   }, [installPrompt]);
 
   return {
@@ -166,7 +208,8 @@ export function usePwaSync(familyId?: string) {
     retrySync,
     updateAvailable,
     applyAppUpdate,
-    canInstall: Boolean(installPrompt),
+    isInstalled,
+    canInstall: Boolean(installPrompt) && !isInstalled && !installDismissed,
     promptInstall,
   };
 }

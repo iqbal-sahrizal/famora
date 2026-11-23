@@ -22,39 +22,51 @@ async function getMemberActor(familyId: string) {
   return { user, supabase, actor };
 }
 
+const notificationTargetSchema = z.object({
+  familyId: z.string().uuid(),
+  notificationId: z.string().uuid(),
+});
+
 export async function markNotificationReadAction(input: {
   familyId: string;
   notificationId: string;
 }) {
-  const { supabase, actor } = await getMemberActor(input.familyId);
+  const parsed = notificationTargetSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid notification identifier." };
+
+  const { supabase, actor } = await getMemberActor(parsed.data.familyId);
   if (!actor) return { ok: false, error: "Active membership required." };
 
   const { error } = await supabase
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
-    .eq("id", input.notificationId)
+    .eq("id", parsed.data.notificationId)
+    .eq("family_id", parsed.data.familyId)
     .eq("recipient_member_id", actor.id);
 
   if (error) return { ok: false, error: error.message };
-  revalidatePath(routes.familyDomain(input.familyId, "notifications"));
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "notifications"));
   return { ok: true };
 }
 
 export async function markAllNotificationsReadAction(input: {
   familyId: string;
 }) {
-  const { supabase, actor } = await getMemberActor(input.familyId);
+  const parsed = z.object({ familyId: z.string().uuid() }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid family identifier." };
+
+  const { supabase, actor } = await getMemberActor(parsed.data.familyId);
   if (!actor) return { ok: false, error: "Active membership required." };
 
   const { error } = await supabase
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
-    .eq("family_id", input.familyId)
+    .eq("family_id", parsed.data.familyId)
     .eq("recipient_member_id", actor.id)
     .is("read_at", null);
 
   if (error) return { ok: false, error: error.message };
-  revalidatePath(routes.familyDomain(input.familyId, "notifications"));
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "notifications"));
   return { ok: true };
 }
 
@@ -180,7 +192,14 @@ export async function revokeDeviceSubscriptionAction(input: {
   familyId: string;
   deviceId: string;
 }) {
-  const { user, supabase } = await getMemberActor(input.familyId);
+  const parsed = z
+    .object({ familyId: z.string().uuid(), deviceId: z.string().uuid() })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid device identifier." };
+
+  const { user, supabase, actor } = await getMemberActor(parsed.data.familyId);
+  if (!actor) return { ok: false, error: "Active membership required." };
+
   const { error } = await supabase
     .from("user_devices")
     .update({
@@ -189,11 +208,11 @@ export async function revokeDeviceSubscriptionAction(input: {
       push_auth: null,
       revoked_at: new Date().toISOString(),
     })
-    .eq("id", input.deviceId)
+    .eq("id", parsed.data.deviceId)
     .eq("user_id", user.id);
 
   if (error) return { ok: false, error: error.message };
-  revalidatePath(routes.familyDomain(input.familyId, "notifications"));
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "notifications"));
   return { ok: true };
 }
 
@@ -201,7 +220,15 @@ export async function retryOutboxDispatchAction(input: {
   familyId: string;
   outboxId: string;
 }) {
-  const res = await processPushOutboxItem(input);
-  revalidatePath(routes.familyDomain(input.familyId, "notifications"));
+  const parsed = z
+    .object({ familyId: z.string().uuid(), outboxId: z.string().uuid() })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid outbox identifier." };
+
+  const { actor } = await getMemberActor(parsed.data.familyId);
+  if (!actor) return { ok: false, error: "Active membership required." };
+
+  const res = await processPushOutboxItem(parsed.data);
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "notifications"));
   return res;
 }

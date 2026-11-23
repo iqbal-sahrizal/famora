@@ -79,7 +79,7 @@ export async function getFinancePageData(familyId: string): Promise<FinancePageD
       return denied;
     }
 
-    const [{ data: fam }, { data: membersData }, { data: accData }, { data: txData }, { data: auditData }] =
+    const [{ data: fam }, { data: membersData }, { data: accData }, { data: txData }, { data: allTxTotals }, { data: auditData }] =
       await Promise.all([
         supabase.from("families").select("currency_code").eq("id", familyId).maybeSingle(),
         supabase
@@ -100,6 +100,10 @@ export async function getFinancePageData(familyId: string): Promise<FinancePageD
           .order("occurred_on", { ascending: false })
           .order("created_at", { ascending: false })
           .limit(60),
+        supabase
+          .from("finance_transactions")
+          .select("kind, amount_numeric, is_reversed")
+          .eq("family_id", familyId),
         supabase
           .from("finance_audit_history")
           .select("id, event_type, amount_numeric, created_at")
@@ -143,17 +147,22 @@ export async function getFinancePageData(familyId: string): Promise<FinancePageD
     }));
 
     const totalBalanceNumeric = sumDecimalStrings(
-      accounts.map((a) => a.balanceNumeric)
+      accounts.filter((a) => !a.isArchived).map((a) => a.balanceNumeric)
     );
+    const activeTotalsSource = (allTxTotals ?? []) as Array<{
+      kind: string;
+      amount_numeric: string | number;
+      is_reversed?: boolean;
+    }>;
     const totalIncomeNumeric = sumDecimalStrings(
-      transactions
-        .filter((t) => t.kind === "income" && !t.isReversed)
-        .map((t) => t.amountNumeric)
+      activeTotalsSource
+        .filter((t) => t.kind === "income" && !t.is_reversed)
+        .map((t) => String(t.amount_numeric ?? "0.00"))
     );
     const totalExpenseNumeric = sumDecimalStrings(
-      transactions
-        .filter((t) => t.kind === "expense" && !t.isReversed)
-        .map((t) => t.amountNumeric)
+      activeTotalsSource
+        .filter((t) => t.kind === "expense" && !t.is_reversed)
+        .map((t) => String(t.amount_numeric ?? "0.00"))
     );
 
     return {

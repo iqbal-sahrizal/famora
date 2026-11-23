@@ -7,16 +7,20 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   addShoppingItemSchema,
   createShoppingListSchema,
+  deleteShoppingItemSchema,
   deleteShoppingListSchema,
   saveTemplateSchema,
   toggleShoppingCheckSchema,
+  updateShoppingItemSchema,
   updateShoppingListSchema,
   updateShoppingQuantitySchema,
   type AddShoppingItemInput,
   type CreateShoppingListInput,
+  type DeleteShoppingItemInput,
   type DeleteShoppingListInput,
   type SaveTemplateInput,
   type ToggleShoppingCheckInput,
+  type UpdateShoppingItemInput,
   type UpdateShoppingListInput,
   type UpdateShoppingQuantityInput,
 } from "./schemas";
@@ -291,6 +295,105 @@ export async function updateShoppingQuantityAction(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Failed to update quantity.",
+    };
+  }
+}
+
+export async function updateShoppingItemAction(
+  input: UpdateShoppingItemInput
+): Promise<ShoppingActionResult> {
+  const user = await requireAuthenticatedUser();
+  const parsed = updateShoppingItemSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid item." };
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: actor } = await supabase
+      .from("family_members")
+      .select("id")
+      .eq("family_id", parsed.data.familyId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle<{ id: string }>();
+
+    if (!actor) {
+      return { ok: false, error: "Not an active member of this family." };
+    }
+
+    if (!(await hasShoppingManagePermission(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "You do not have permission to manage shopping items." };
+    }
+
+    const { error } = await supabase
+      .from("shopping_items")
+      .update({
+        name: parsed.data.name,
+        category: parsed.data.category,
+        quantity: parsed.data.quantity,
+        unit: parsed.data.unit,
+        estimated_price_cents: parsed.data.estimatedPriceCents,
+        notes: parsed.data.notes,
+      })
+      .eq("id", parsed.data.itemId)
+      .eq("family_id", parsed.data.familyId);
+
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
+    revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to update item.",
+    };
+  }
+}
+
+export async function deleteShoppingItemAction(
+  input: DeleteShoppingItemInput
+): Promise<ShoppingActionResult> {
+  const user = await requireAuthenticatedUser();
+  const parsed = deleteShoppingItemSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid item." };
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: actor } = await supabase
+      .from("family_members")
+      .select("id")
+      .eq("family_id", parsed.data.familyId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle<{ id: string }>();
+
+    if (!actor) {
+      return { ok: false, error: "Not an active member of this family." };
+    }
+
+    if (!(await hasShoppingManagePermission(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "You do not have permission to manage shopping items." };
+    }
+
+    const { error } = await supabase
+      .from("shopping_items")
+      .delete()
+      .eq("id", parsed.data.itemId)
+      .eq("family_id", parsed.data.familyId);
+
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
+    revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to delete item.",
     };
   }
 }

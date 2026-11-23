@@ -21,7 +21,8 @@ import { EmptyState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
-import { formatLocalizedDate } from "@/lib/i18n";
+import { formatLocalizedDate, toIntlLocale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
 import {
   buildCategoryBreakdown,
@@ -69,7 +70,9 @@ export function FamilyAnalyticsView({
 }) {
   const router = useRouter();
   const { locale, t, te } = useLocale();
+  const intlLocale = toIntlLocale(locale);
   const [range, setRange] = React.useState<RangePreset>("30d");
+  const [activeFlowMonth, setActiveFlowMonth] = React.useState<string | null>(null);
   const [tab, setTab] = React.useState<"reports" | "goals" | "debts">("reports");
   const [busy, setBusy] = React.useState(false);
 
@@ -248,42 +251,42 @@ export function FamilyAnalyticsView({
         <div className="space-y-8">
           {/* Period Comparison Strip */}
           <div className="grid gap-4 md:grid-cols-3">
-            <Card variant="sage" className="p-5">
+            <Card variant="sage" className="min-w-0 p-5">
               <p className="text-[12px] font-semibold uppercase tracking-wider opacity-80">
                 {t("analytics.periodIncome")}
               </p>
-              <p className="mt-1 font-heading text-[26px] font-bold tabular-nums">
-                {formatNumericCurrency(summary.incomeNumeric, data.currencyCode)}
+              <p className="mt-1 font-heading text-[22px] sm:text-[26px] font-bold tabular-nums break-words">
+                {formatNumericCurrency(summary.incomeNumeric, data.currencyCode, intlLocale)}
               </p>
-              <p className="mt-1 text-[12px] opacity-80 tabular-nums">
+              <p className="mt-1 text-[12px] opacity-80 tabular-nums break-words">
                 {t("analytics.priorPeriod", {
-                  amount: formatNumericCurrency(prevSummary.incomeNumeric, data.currencyCode),
+                  amount: formatNumericCurrency(prevSummary.incomeNumeric, data.currencyCode, intlLocale),
                 })}
               </p>
             </Card>
 
-            <Card variant="peach" className="p-5">
+            <Card variant="peach" className="min-w-0 p-5">
               <p className="text-[12px] font-semibold uppercase tracking-wider opacity-80">
                 {t("analytics.periodExpense")}
               </p>
-              <p className="mt-1 font-heading text-[26px] font-bold tabular-nums">
-                {formatNumericCurrency(summary.expenseNumeric, data.currencyCode)}
+              <p className="mt-1 font-heading text-[22px] sm:text-[26px] font-bold tabular-nums break-words">
+                {formatNumericCurrency(summary.expenseNumeric, data.currencyCode, intlLocale)}
               </p>
-              <p className="mt-1 text-[12px] opacity-80 tabular-nums">
+              <p className="mt-1 text-[12px] opacity-80 tabular-nums break-words">
                 {t("analytics.priorPeriod", {
-                  amount: formatNumericCurrency(prevSummary.expenseNumeric, data.currencyCode),
+                  amount: formatNumericCurrency(prevSummary.expenseNumeric, data.currencyCode, intlLocale),
                 })}
               </p>
             </Card>
 
-            <Card className="p-5">
+            <Card className="min-w-0 p-5">
               <p className="text-[12px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                 {t("analytics.netCashFlow")}
               </p>
-              <p className="mt-1 font-heading text-[26px] font-bold tabular-nums">
-                {formatNumericCurrency(summary.netCashFlowNumeric, data.currencyCode)}
+              <p className="mt-1 font-heading text-[22px] sm:text-[26px] font-bold tabular-nums break-words">
+                {formatNumericCurrency(summary.netCashFlowNumeric, data.currencyCode, intlLocale)}
               </p>
-              <p className="mt-1 text-[12px] text-[var(--text-secondary)] tabular-nums">
+              <p className="mt-1 text-[12px] text-[var(--text-secondary)] tabular-nums break-words">
                 {t("budgets.dateRange", {
                   start: formatLocalizedDate(win.start, locale),
                   end: formatLocalizedDate(win.end, locale),
@@ -319,36 +322,69 @@ export function FamilyAnalyticsView({
                   description={t("analytics.noCashFlowDesc")}
                 />
               ) : (
-                <div className="flex h-52 items-end gap-4 pt-6">
-                  {cashFlow.map((pt) => {
-                    const incH = Math.max(
-                      8,
-                      Number((parseDecimalToMinorUnits(pt.incomeNumeric) * 100n) / maxFlowMinor)
-                    );
-                    const expH = Math.max(
-                      8,
-                      Number((parseDecimalToMinorUnits(pt.expenseNumeric) * 100n) / maxFlowMinor)
-                    );
+                <div className="space-y-3">
+                  {activeFlowMonth && (() => {
+                    const activePt = cashFlow.find((p) => p.monthKey === activeFlowMonth);
+                    if (!activePt) return null;
                     return (
-                      <div key={pt.monthKey} className="flex flex-1 flex-col items-center gap-2">
-                        <div className="flex h-36 w-full items-end justify-center gap-1.5">
-                          <div
-                            title={`${t("analytics.incomeLegend")}: ${formatNumericCurrency(pt.incomeNumeric, data.currencyCode)}`}
-                            style={{ height: `${incH}%` }}
-                            className="w-4 sm:w-6 rounded-t-lg bg-[var(--accent-primary)] transition-all"
-                          />
-                          <div
-                            title={`${t("analytics.expenseLegend")}: ${formatNumericCurrency(pt.expenseNumeric, data.currencyCode)}`}
-                            style={{ height: `${expH}%` }}
-                            className="w-4 sm:w-6 rounded-t-lg bg-[#E9B98B] transition-all"
-                          />
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-[12.5px] tabular-nums">
+                        <span className="font-semibold">{activePt.monthKey}</span>
+                        <div className="flex flex-wrap gap-3">
+                          <span className="text-[var(--accent-primary)] font-medium">
+                            {t("analytics.incomeLegend")}: {formatNumericCurrency(activePt.incomeNumeric, data.currencyCode, intlLocale)}
+                          </span>
+                          <span className="font-medium">
+                            {t("analytics.expenseLegend")}: {formatNumericCurrency(activePt.expenseNumeric, data.currencyCode, intlLocale)}
+                          </span>
                         </div>
-                        <span className="text-[11.5px] font-medium text-[var(--text-secondary)] tabular-nums">
-                          {pt.monthKey}
-                        </span>
                       </div>
                     );
-                  })}
+                  })()}
+                  <div className="overflow-x-auto pb-1">
+                    <div className="flex h-52 min-w-[480px] items-end gap-4 pt-6">
+                      {cashFlow.map((pt) => {
+                        const incH = Math.max(
+                          8,
+                          Number((parseDecimalToMinorUnits(pt.incomeNumeric) * 100n) / maxFlowMinor)
+                        );
+                        const expH = Math.max(
+                          8,
+                          Number((parseDecimalToMinorUnits(pt.expenseNumeric) * 100n) / maxFlowMinor)
+                        );
+                        const isSelected = activeFlowMonth === pt.monthKey;
+                        return (
+                          <button
+                            key={pt.monthKey}
+                            type="button"
+                            onClick={() =>
+                              setActiveFlowMonth((prev) => (prev === pt.monthKey ? null : pt.monthKey))
+                            }
+                            aria-label={`${pt.monthKey}: ${t("analytics.incomeLegend")} ${formatNumericCurrency(pt.incomeNumeric, data.currencyCode, intlLocale)}, ${t("analytics.expenseLegend")} ${formatNumericCurrency(pt.expenseNumeric, data.currencyCode, intlLocale)}`}
+                            className={cn(
+                              "flex flex-1 flex-col items-center gap-2 rounded-xl p-1 transition-colors cursor-pointer",
+                              isSelected && "bg-[var(--bg-subtle)]"
+                            )}
+                          >
+                            <div className="flex h-36 w-full items-end justify-center gap-1.5">
+                              <div
+                                title={`${t("analytics.incomeLegend")}: ${formatNumericCurrency(pt.incomeNumeric, data.currencyCode, intlLocale)}`}
+                                style={{ height: `${incH}%` }}
+                                className="w-4 sm:w-6 rounded-t-lg bg-[var(--accent-primary)] transition-all"
+                              />
+                              <div
+                                title={`${t("analytics.expenseLegend")}: ${formatNumericCurrency(pt.expenseNumeric, data.currencyCode, intlLocale)}`}
+                                style={{ height: `${expH}%` }}
+                                className="w-4 sm:w-6 rounded-t-lg bg-[#E9B98B] transition-all"
+                              />
+                            </div>
+                            <span className="text-[11.5px] font-medium text-[var(--text-secondary)] tabular-nums">
+                              {pt.monthKey}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </Card>

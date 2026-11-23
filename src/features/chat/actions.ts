@@ -143,6 +143,22 @@ export async function sendChatMessageAction(formData: FormData): Promise<{
     }
   }
 
+  if (parsed.data.replyToMessageId) {
+    const { data: replyTarget } = await access.supabase
+      .from("chat_messages")
+      .select("id")
+      .eq("id", parsed.data.replyToMessageId)
+      .eq("conversation_id", parsed.data.conversationId)
+      .eq("family_id", parsed.data.familyId)
+      .maybeSingle<{ id: string }>();
+    if (!replyTarget) {
+      if (attachmentPath) {
+        await access.supabase.storage.from("chat-attachments").remove([attachmentPath]);
+      }
+      return { ok: false, error: "Reply target message not found in this conversation." };
+    }
+  }
+
   const { data: inserted, error: insertErr } = await access.supabase
     .from("chat_messages")
     .insert({
@@ -180,6 +196,9 @@ export async function sendChatMessageAction(formData: FormData): Promise<{
 
   // Idempotent retry handling if client_nonce was already persisted
   if (insertErr?.code === "23505") {
+    if (attachmentPath) {
+      await access.supabase.storage.from("chat-attachments").remove([attachmentPath]);
+    }
     const { data: existing } = await access.supabase
       .from("chat_messages")
       .select(
@@ -299,23 +318,60 @@ export async function editChatMessageAction(input: {
   return { ok: true, editedAt };
 }
 
+const messageActionIdSchema = z.object({
+  familyId: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  messageId: z.string().uuid(),
+});
+
 export async function deleteChatMessageAction(input: {
   familyId: string;
   conversationId: string;
   messageId: string;
 }) {
-  const access = await requireChatAccess(input.familyId, input.conversationId);
+  const parsed = messageActionIdSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid message." };
+
+  const access = await requireChatAccess(parsed.data.familyId, parsed.data.conversationId);
   if (!access.ok) return { ok: false, error: access.error };
 
+  const { data: targetMsg } = await access.supabase
+    .from("chat_messages")
+    .select("id, sender_member_id, attachment_path")
+    .eq("id", parsed.data.messageId)
+    .eq("conversation_id", parsed.data.conversationId)
+    .eq("family_id", parsed.data.familyId)
+    .maybeSingle<{ id: string; sender_member_id: string | null; attachment_path: string | null }>();
+
+  if (!targetMsg) {
+    return { ok: false, error: "Message not found." };
+  }
+  if (
+    targetMsg.sender_member_id !== access.actor.id &&
+    !access.permSet.has("chat.adults_only.participate")
+  ) {
+    return { ok: false, error: "You do not have permission to delete this message." };
+  }
+
   const deletedAt = new Date().toISOString();
-  const { error } = await access.supabase
+  const { data: deleted, error } = await access.supabase
     .from("chat_messages")
     .update({ deleted_at: deletedAt, is_pinned: false })
-    .eq("id", input.messageId)
-    .eq("conversation_id", input.conversationId);
+    .eq("id", parsed.data.messageId)
+    .eq("conversation_id", parsed.data.conversationId)
+    .select("id")
+    .maybeSingle<{ id: string }>();
 
   if (error) return { ok: false, error: error.message };
-  revalidatePath(routes.familyDomain(input.familyId, "chat"));
+  if (!deleted) {
+    return { ok: false, error: "You do not have permission to delete this message." };
+  }
+  if (targetMsg.attachment_path) {
+    await access.supabase.storage
+      .from("chat-attachments")
+      .remove([targetMsg.attachment_path]);
+  }
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "chat"));
   return { ok: true, deletedAt };
 }
 
@@ -325,16 +381,19 @@ export async function toggleChatReactionAction(input: {
   messageId: string;
   emoji: string;
 }) {
+  const parsed = messageActionIdSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid reaction." };
+
   const emoji = input.emoji.trim().slice(0, 16);
   if (!emoji) return { ok: false, error: "Invalid reaction." };
 
-  const access = await requireChatAccess(input.familyId, input.conversationId);
+  const access = await requireChatAccess(parsed.data.familyId, parsed.data.conversationId);
   if (!access.ok) return { ok: false, error: access.error };
 
   const { data: existing } = await access.supabase
     .from("chat_message_reactions")
     .select("id")
-    .eq("message_id", input.messageId)
+    .eq("message_id", parsed.data.messageId)
     .eq("member_id", access.actor.id)
     .eq("emoji", emoji)
     .maybeSingle<{ id: string }>();
@@ -349,9 +408,9 @@ export async function toggleChatReactionAction(input: {
   }
 
   const { error } = await access.supabase.from("chat_message_reactions").insert({
-    family_id: input.familyId,
-    conversation_id: input.conversationId,
-    message_id: input.messageId,
+    family_id: parsed.data.familyId,
+    conversation_id: parsed.data.conversationId,
+    message_id: parsed.data.messageId,
     member_id: access.actor.id,
     emoji,
   });
@@ -365,22 +424,30 @@ export async function togglePinChatMessageAction(input: {
   messageId: string;
   pin: boolean;
 }) {
-  const access = await requireChatAccess(input.familyId, input.conversationId);
+  const parsed = messageActionIdSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid message." };
+
+  const access = await requireChatAccess(parsed.data.familyId, parsed.data.conversationId);
   if (!access.ok) return { ok: false, error: access.error };
 
-  const { error } = await access.supabase
+  const { data: updated, error } = await access.supabase
     .from("chat_messages")
     .update({
       is_pinned: input.pin,
       pinned_by_member_id: input.pin ? access.actor.id : null,
       pinned_at: input.pin ? new Date().toISOString() : null,
     })
-    .eq("id", input.messageId)
-    .eq("conversation_id", input.conversationId)
-    .is("deleted_at", null);
+    .eq("id", parsed.data.messageId)
+    .eq("conversation_id", parsed.data.conversationId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle<{ id: string }>();
 
   if (error) return { ok: false, error: error.message };
-  revalidatePath(routes.familyDomain(input.familyId, "chat"));
+  if (!updated) {
+    return { ok: false, error: "You do not have permission to pin messages." };
+  }
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "chat"));
   return { ok: true };
 }
 
@@ -389,17 +456,26 @@ export async function markConversationReadAction(input: {
   conversationId: string;
   lastMessageId: string | null;
 }) {
-  const access = await requireChatAccess(input.familyId, input.conversationId);
+  const parsed = z
+    .object({
+      familyId: z.string().uuid(),
+      conversationId: z.string().uuid(),
+      lastMessageId: z.string().uuid().nullable(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid read receipt." };
+
+  const access = await requireChatAccess(parsed.data.familyId, parsed.data.conversationId);
   if (!access.ok) return { ok: false, error: access.error };
 
   const now = new Date().toISOString();
   const { error } = await access.supabase
     .from("chat_participants")
     .update({
-      last_read_message_id: input.lastMessageId,
+      last_read_message_id: parsed.data.lastMessageId,
       last_read_at: now,
     })
-    .eq("conversation_id", input.conversationId)
+    .eq("conversation_id", parsed.data.conversationId)
     .eq("member_id", access.actor.id);
 
   if (error) return { ok: false, error: error.message };
@@ -411,7 +487,18 @@ export async function loadConversationMessagesAction(input: {
   conversationId: string;
   beforeCreatedAt?: string | null;
 }) {
-  const access = await requireChatAccess(input.familyId, input.conversationId);
+  const parsed = z
+    .object({
+      familyId: z.string().uuid(),
+      conversationId: z.string().uuid(),
+      beforeCreatedAt: z.string().nullable().optional(),
+    })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Invalid conversation.", messages: [] as ChatMessageItem[], hasMoreOlder: false };
+  }
+
+  const access = await requireChatAccess(parsed.data.familyId, parsed.data.conversationId);
   if (!access.ok) {
     return { ok: false, error: access.error, messages: [] as ChatMessageItem[], hasMoreOlder: false };
   }
@@ -419,7 +506,7 @@ export async function loadConversationMessagesAction(input: {
   const { data: membersData } = await access.supabase
     .from("family_members")
     .select("id, display_name")
-    .eq("family_id", input.familyId)
+    .eq("family_id", parsed.data.familyId)
     .eq("status", "active");
 
   const memberNameMap = new Map<string, string>(
@@ -430,10 +517,10 @@ export async function loadConversationMessagesAction(input: {
 
   const page = await hydrateMessagesPage({
     supabase: access.supabase,
-    conversationId: input.conversationId,
+    conversationId: parsed.data.conversationId,
     currentMemberId: access.actor.id,
     memberNameMap,
-    beforeCreatedAt: input.beforeCreatedAt,
+    beforeCreatedAt: parsed.data.beforeCreatedAt,
   });
 
   return { ok: true, ...page };
@@ -628,17 +715,26 @@ export async function getChatAttachmentSignedUrlAction(input: {
   conversationId: string;
   attachmentPath: string;
 }) {
-  const access = await requireChatAccess(input.familyId, input.conversationId);
+  const parsed = z
+    .object({
+      familyId: z.string().uuid(),
+      conversationId: z.string().uuid(),
+      attachmentPath: z.string().min(1),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid attachment." };
+
+  const access = await requireChatAccess(parsed.data.familyId, parsed.data.conversationId);
   if (!access.ok) return { ok: false, error: access.error };
 
-  const expectedPrefix = `${input.familyId}/${input.conversationId}/`;
-  if (!input.attachmentPath.startsWith(expectedPrefix)) {
+  const expectedPrefix = `${parsed.data.familyId}/${parsed.data.conversationId}/`;
+  if (!parsed.data.attachmentPath.startsWith(expectedPrefix)) {
     return { ok: false, error: "Attachment does not belong to this conversation." };
   }
 
   const { data, error } = await access.supabase.storage
     .from("chat-attachments")
-    .createSignedUrl(input.attachmentPath, 120);
+    .createSignedUrl(parsed.data.attachmentPath, 120);
 
   if (error || !data?.signedUrl) {
     return { ok: false, error: error?.message ?? "Could not create signed URL." };

@@ -63,13 +63,13 @@ export function DatePicker({
       </button>
 
       {open && (
-        <div className="absolute top-full z-40 mt-2 w-72 rounded-[20px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-float)]">
+        <div className="absolute top-full z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[20px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-float)]">
           <div className="mb-3 flex items-center justify-between">
             <button
               type="button"
               aria-label={t("datepicker.prevMonthAria")}
               onClick={() => setViewMonth(new Date(year, month - 1, 1))}
-              className="rounded-full p-1.5 hover:bg-[var(--bg-subtle)] cursor-pointer"
+              className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-[var(--bg-subtle)] cursor-pointer"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -83,7 +83,7 @@ export function DatePicker({
               type="button"
               aria-label={t("datepicker.nextMonthAria")}
               onClick={() => setViewMonth(new Date(year, month + 1, 1))}
-              className="rounded-full p-1.5 hover:bg-[var(--bg-subtle)] cursor-pointer"
+              className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-[var(--bg-subtle)] cursor-pointer"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -114,7 +114,7 @@ export function DatePicker({
                     setOpen(false);
                   }}
                   className={cn(
-                    "h-8 w-8 rounded-full text-[13px] tabular-nums transition-colors cursor-pointer",
+                    "flex h-11 w-full items-center justify-center rounded-full text-[13px] tabular-nums transition-colors cursor-pointer sm:h-9",
                     isSelected
                       ? "bg-[var(--accent-primary)] font-semibold text-[var(--accent-primary-fg)]"
                       : "hover:bg-[var(--bg-subtle)] text-[var(--text-primary)]"

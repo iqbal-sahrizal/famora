@@ -147,9 +147,40 @@ export async function cancelCalendarEventAction(params: {
   familyId: string;
   eventId: string;
 }): Promise<CalendarActionResult> {
-  await requireAuthenticatedUser();
+  const user = await requireAuthenticatedUser();
+  if (
+    !/^[0-9a-f-]{36}$/i.test(params.familyId) ||
+    !/^[0-9a-f-]{36}$/i.test(params.eventId)
+  ) {
+    return { ok: false, error: "Invalid event reference." };
+  }
+
   try {
     const supabase = await createSupabaseServerClient();
+    const [{ data: perms }, { data: actor }] = await Promise.all([
+      supabase.rpc("get_my_family_permissions", {
+        p_family_id: params.familyId,
+      }),
+      supabase
+        .from("family_members")
+        .select("id")
+        .eq("family_id", params.familyId)
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle<{ id: string }>(),
+    ]);
+    const permSet = new Set(
+      ((perms as Array<{ permission_key: string }>) ?? []).map(
+        (p) => p.permission_key
+      )
+    );
+    if (!actor || !permSet.has("calendar.family.manage")) {
+      return {
+        ok: false,
+        error: "You do not have permission to manage calendar events.",
+      };
+    }
+
     const { error } = await supabase
       .from("calendar_events")
       .update({ status: "cancelled" })

@@ -100,7 +100,9 @@ export function FamilyFinanceView({
   );
 
   // Transaction form
-  const [txAccountId, setTxAccountId] = React.useState(data.accounts[0]?.id ?? "");
+  const [txAccountId, setTxAccountId] = React.useState(
+    () => data.accounts.find((a) => !a.isArchived)?.id ?? ""
+  );
   const [txKind, setTxKind] = React.useState<"expense" | "income" | "transfer">("expense");
   const [txAmount, setTxAmount] = React.useState("");
   const [txMerchant, setTxMerchant] = React.useState("");
@@ -110,9 +112,10 @@ export function FamilyFinanceView({
   );
   const [txNotes, setTxNotes] = React.useState("");
   const [txTransferDst, setTxTransferDst] = React.useState(
-    data.accounts[1]?.id ?? ""
+    () => data.accounts.filter((a) => !a.isArchived)[1]?.id ?? ""
   );
   const [txAttachment, setTxAttachment] = React.useState("");
+  const [selectedTx, setSelectedTx] = React.useState<FinanceTransactionItem | null>(null);
 
   if (!data.authorized) {
     return (
@@ -223,6 +226,10 @@ export function FamilyFinanceView({
 
   const handleRecordTx = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (txKind === "transfer" && txTransferDst && txTransferDst === txAccountId) {
+      toast.error(t("finance.transferSameAccount"));
+      return;
+    }
     setBusy(true);
     const res = await recordFinanceTransactionAction({
       familyId,
@@ -297,16 +304,16 @@ export function FamilyFinanceView({
       {/* Fintech Overview Hero */}
       <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <Card variant="sage" className="flex flex-col justify-between gap-6 p-7">
-          <div>
+          <div className="min-w-0">
             <p className="text-[12.5px] font-semibold uppercase tracking-wider opacity-75">
               {t("finance.totalBalance")}
             </p>
-            <p className="mt-1 font-heading text-[38px] font-bold leading-none tabular-nums">
+            <p className="mt-1 font-heading text-[28px] sm:text-[38px] font-bold leading-none tabular-nums break-words">
               {formatNumericCurrency(data.totalBalanceNumeric, data.currencyCode, intlLocale)}
             </p>
           </div>
           <div className="space-y-2">
-            <div className="flex justify-between text-[13px] font-medium tabular-nums">
+            <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-[13px] font-medium tabular-nums">
               <span>
                 {t("finance.income")}: {formatNumericCurrency(data.totalIncomeNumeric, data.currencyCode, intlLocale)}
               </span>
@@ -354,8 +361,13 @@ export function FamilyFinanceView({
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="font-heading text-[15.5px] font-bold tabular-nums mr-1">
-                      {formatNumericCurrency(acc.balanceNumeric, acc.currencyCode)}
+                    <span
+                      className={cn(
+                        "font-heading text-[15.5px] font-bold tabular-nums mr-1",
+                        acc.balanceNumeric.startsWith("-") && "text-[var(--accent-danger)]"
+                      )}
+                    >
+                      {formatNumericCurrency(acc.balanceNumeric, acc.currencyCode, intlLocale)}
                     </span>
                     {data.canManageAccounts && (
                       <>
@@ -478,7 +490,11 @@ export function FamilyFinanceView({
                     tx.isReversed && "opacity-55"
                   )}
                 >
-                  <div className="flex items-start gap-3.5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTx(tx)}
+                    className="flex min-w-0 flex-1 items-start gap-3.5 text-left cursor-pointer"
+                  >
                     <span
                       className={cn(
                         "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
@@ -497,7 +513,7 @@ export function FamilyFinanceView({
                         <ArrowUpRight className="h-4 w-4" />
                       )}
                     </span>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-heading text-[15px] font-semibold">
                           {tx.merchant}
@@ -515,7 +531,7 @@ export function FamilyFinanceView({
                         {tx.notes ? ` — ${tx.notes}` : ""}
                       </p>
                     </div>
-                  </div>
+                  </button>
 
                   <div className="flex items-center gap-3 self-end sm:self-center">
                     <span
@@ -527,7 +543,7 @@ export function FamilyFinanceView({
                       )}
                     >
                       {tx.kind === "income" ? "+" : tx.kind === "expense" ? "-" : ""}
-                      {formatNumericCurrency(tx.amountNumeric, data.currencyCode)}
+                      {formatNumericCurrency(tx.amountNumeric, data.currencyCode, intlLocale)}
                     </span>
 
                     {!tx.isReversed &&
@@ -688,11 +704,13 @@ export function FamilyFinanceView({
           />
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              label={t("finance.modal.categoryLabel")}
-              value={txCategory}
-              onChange={(e) => setTxCategory(e.target.value)}
-            />
+            {txKind !== "transfer" && (
+              <Input
+                label={t("finance.modal.categoryLabel")}
+                value={txCategory}
+                onChange={(e) => setTxCategory(e.target.value)}
+              />
+            )}
             <Input
               label={t("finance.modal.dateLabel")}
               type="date"
@@ -831,6 +849,55 @@ export function FamilyFinanceView({
           You can restore this account later at any time.
         </p>
       </Dialog>
+
+      {/* Transaction Detail Sheet */}
+      <BottomSheet
+        open={Boolean(selectedTx)}
+        onClose={() => setSelectedTx(null)}
+        title={t("finance.txDetailTitle")}
+      >
+        {selectedTx && (
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-heading text-[18px] font-bold break-words">
+                  {selectedTx.merchant}
+                </p>
+                <p className="text-[13px] text-[var(--text-secondary)]">
+                  {selectedTx.accountName} · {selectedTx.occurredOn}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "font-heading text-[18px] font-bold tabular-nums shrink-0",
+                  selectedTx.kind === "income"
+                    ? "text-[var(--accent-primary)]"
+                    : "text-[var(--text-primary)]"
+                )}
+              >
+                {selectedTx.kind === "income" ? "+" : selectedTx.kind === "expense" ? "-" : ""}
+                {formatNumericCurrency(selectedTx.amountNumeric, data.currencyCode, intlLocale)}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="neutral">{selectedTx.category}</Badge>
+              <Badge variant="neutral">{selectedTx.memberName}</Badge>
+              {selectedTx.isReversed && <Badge variant="peach">Reversed</Badge>}
+            </div>
+            {selectedTx.notes && (
+              <p className="rounded-2xl bg-[var(--bg-subtle)] p-3.5 text-[13.5px]">
+                {selectedTx.notes}
+              </p>
+            )}
+            {selectedTx.attachmentName && (
+              <p className="flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)]">
+                <Paperclip className="h-3.5 w-3.5" />
+                {selectedTx.attachmentName}
+              </p>
+            )}
+          </div>
+        )}
+      </BottomSheet>
     </Section>
   );
 }

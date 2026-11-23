@@ -195,4 +195,22 @@ describe("Family Chat — Security, Realtime & UX Helpers", () => {
     expect(isChatImageMimeType("image/png")).toBe(true);
     expect(isChatImageMimeType("application/pdf")).toBe(false);
   });
+
+  it("rejects invalid UUIDs on deleteChatMessageAction and togglePinChatMessageAction", async () => {
+    const { deleteChatMessageAction, togglePinChatMessageAction } = await import("../actions");
+    const delRes = await deleteChatMessageAction({
+      familyId: "not-a-uuid",
+      conversationId: "not-a-uuid",
+      messageId: "not-a-uuid",
+    });
+    expect(delRes.ok).toBe(false);
+
+    const pinRes = await togglePinChatMessageAction({
+      familyId: "not-a-uuid",
+      conversationId: "not-a-uuid",
+      messageId: "not-a-uuid",
+      pin: true,
+    });
+    expect(pinRes.ok).toBe(false);
+  });
 });

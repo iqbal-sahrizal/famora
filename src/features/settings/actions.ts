@@ -22,6 +22,7 @@ import {
 export interface SettingsActionResult {
   ok: boolean;
   error?: string;
+  warning?: string;
 }
 
 async function assertServerPermission(
@@ -285,7 +286,7 @@ export async function deleteFamilyAction(
       { data: childAttachments },
     ] = await Promise.all([
       supabase
-        .from("document_files")
+        .from("documents")
         .select("storage_path")
         .eq("family_id", parsed.data.familyId),
       supabase
@@ -334,24 +335,30 @@ export async function deleteFamilyAction(
     if (rpcError) return { ok: false, error: rpcError.message };
 
     // Best-effort cleanup of storage buckets with 1 retry for transient failures
+    const cleanupWarnings: string[] = [];
     const removeBucketWithRetry = async (bucket: string, paths: string[]) => {
       if (paths.length === 0) return;
       const first = await supabase.storage.from(bucket).remove(paths);
       if (first?.error) {
-        await supabase.storage.from(bucket).remove(paths);
+        const retry = await supabase.storage.from(bucket).remove(paths);
+        if (retry?.error) {
+          cleanupWarnings.push(`${bucket}: ${retry.error.message}`);
+        }
       }
     };
 
     await Promise.allSettled([
       removeBucketWithRetry("family-documents", docPaths),
       removeBucketWithRetry("family-memories", memoryPaths),
-      removeBucketWithRetry("family-chat", chatPaths),
+      removeBucketWithRetry("chat-attachments", chatPaths),
       removeBucketWithRetry("family-child-attachments", childAttPaths),
     ]);
 
     revalidatePath("/", "layout");
     revalidatePath(routes.onboarding);
-    return { ok: true };
+    return cleanupWarnings.length > 0
+      ? { ok: true, warning: `Storage cleanup partial: ${cleanupWarnings.join("; ")}` }
+      : { ok: true };
   } catch (err) {
     return {
       ok: false,

@@ -114,10 +114,10 @@ export function DesignShowcase() {
   };
 
   return (
-    <div className="min-h-screen pb-24">
+    <div className="min-h-dvh overflow-x-clip pb-24">
       {/* Sticky Minimal Header */}
-      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">
               <HeartHandshake className="h-5 w-5" strokeWidth={1.75} />
@@ -585,7 +585,7 @@ export function DesignShowcase() {
               value={eventNotes}
               onChange={(e) => setEventNotes(e.target.value)}
               placeholder="Optional notes"
-              className="w-full rounded-xl bg-[var(--bg-subtle)] p-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/15"
+              className="w-full rounded-xl bg-[var(--bg-subtle)] p-3 text-[16px] sm:text-[14px] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/15"
             />
           </div>
           <DatePicker
@@ -619,7 +619,7 @@ export function DesignShowcase() {
               value={itemNotes}
               onChange={(e) => setItemNotes(e.target.value)}
               placeholder="Brand or quantity"
-              className="w-full rounded-xl bg-[var(--bg-subtle)] p-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/15"
+              className="w-full rounded-xl bg-[var(--bg-subtle)] p-3 text-[16px] sm:text-[14px] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/15"
             />
           </div>
           <Select

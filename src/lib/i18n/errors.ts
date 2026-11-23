@@ -129,6 +129,14 @@ const ERROR_TRANSLATIONS_ID: Record<string, string> = {
   "You do not have permission to access this conversation.":
     "Anda tidak memiliki izin untuk mengakses percakapan ini.",
   "Message cannot be empty.": "Pesan tidak boleh kosong.",
+  "Unsupported attachment type. Allowed: JPEG, PNG, WebP, GIF, PDF, or TXT.":
+    "Jenis lampiran tidak didukung. Diizinkan: JPEG, PNG, WebP, GIF, PDF, atau TXT.",
+  "Attachment size must be between 1 byte and 10 MB.":
+    "Ukuran lampiran harus antara 1 byte dan 10 MB.",
+  "You do not have permission to delete this message.":
+    "Anda tidak memiliki izin untuk menghapus pesan ini.",
+  "You do not have permission to pin messages.":
+    "Anda tidak memiliki izin untuk menyematkan pesan.",
 
   // Finance
   "Cannot record transactions on an archived account. Restore it first.":
@@ -167,6 +175,18 @@ const ERROR_TRANSLATIONS_ID: Record<string, string> = {
   "Invalid notification identifier.": "Pengenal notifikasi tidak valid.",
   "Notification not found or not owned by you.":
     "Notifikasi tidak ditemukan atau bukan milik Anda.",
+  "Invalid push subscription.": "Langganan push tidak valid.",
+  "Invalid preferences.": "Preferensi tidak valid.",
+  "Recipient member not found.": "Anggota penerima tidak ditemukan.",
+  "Recipient does not belong to this family.": "Penerima bukan anggota keluarga ini.",
+  "Recipient membership is not active.": "Keanggotaan penerima tidak aktif.",
+
+  // AI Assistant
+  "Enter a message.": "Masukkan pesan.",
+  "Invalid prompt.": "Prompt tidak valid.",
+  "Could not start chat.": "Tidak dapat memulai obrolan.",
+  "Conversation not found.": "Percakapan tidak ditemukan.",
+  "Unable to verify AI rate limit.": "Tidak dapat memverifikasi batas penggunaan AI.",
 
   // Household & Documents
   "Invalid adjustment.": "Penyesuaian tidak valid.",

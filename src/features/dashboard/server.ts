@@ -26,6 +26,7 @@ export interface DashboardTask {
   dueAt: string | null;
   pointsValue: number;
   assigneeName: string | null;
+  isAssignedToMe?: boolean;
 }
 
 export interface DashboardAnnouncement {
@@ -282,6 +283,9 @@ export async function getFamilyDashboardData(
       assigneeName: t.assigned_member_id
         ? memberNameMap.get(t.assigned_member_id) ?? null
         : null,
+      isAssignedToMe: Boolean(
+        selfMember && t.assigned_member_id === selfMember.id
+      ),
     }));
 
     let financeSummary: DashboardFinanceSummary | null = null;

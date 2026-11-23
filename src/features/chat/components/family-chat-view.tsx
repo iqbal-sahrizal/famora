@@ -35,7 +35,7 @@ import { EmptyState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { formatLocalizedTime } from "@/lib/i18n";
+import { formatLocalizedDate, formatLocalizedTime } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
 import {
@@ -86,7 +86,9 @@ export function FamilyChatView({
   const [activeConvId, setActiveConvId] = React.useState<string | null>(
     data.initialConversationId
   );
-  const [mobileShowThread, setMobileShowThread] = React.useState(false);
+  const [mobileShowThread, setMobileShowThread] = React.useState(
+    Boolean(data.initialConversationId)
+  );
 
   const [messagesByConv, setMessagesByConv] = React.useState<
     Record<string, ChatMessageItem[]>
@@ -140,7 +142,20 @@ export function FamilyChatView({
 
   const messageListRef = React.useRef<HTMLDivElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const composerRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const typingTimersRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const isNearBottomRef = React.useRef(true);
+  const [pendingPreviewUrl, setPendingPreviewUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!pendingFile || !isChatImageMimeType(pendingFile.type)) {
+      setPendingPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(pendingFile);
+    setPendingPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingFile]);
   const pendingScrollRestoreRef = React.useRef<{
     prevScrollHeight: number;
     prevScrollTop: number;
@@ -315,17 +330,25 @@ export function FamilyChatView({
           };
 
           setMessagesByConv((prev) => {
-            const nextList = mergeAndSortMessages(prev[activeConvId] ?? [], [
-              incoming,
-            ]);
-            if (isNearBottomRef.current) {
-              requestAnimationFrame(() => scrollToBottom("smooth"));
-              void syncReadReceipt(activeConvId, nextList);
-            } else if (row.sender_member_id !== data.currentMemberId) {
-              setShowNewMessagesPill(true);
-            }
+            const prevList = prev[activeConvId] ?? [];
+            const prevExisting = prevList.find((m) => m.id === incoming.id);
+            const enrichedIncoming: ChatMessageItem =
+              prevExisting?.replyPreview && !incoming.replyPreview
+                ? { ...incoming, replyPreview: prevExisting.replyPreview }
+                : incoming;
+            const nextList = mergeAndSortMessages(prevList, [enrichedIncoming]);
             return { ...prev, [activeConvId]: nextList };
           });
+          if (isNearBottomRef.current) {
+            requestAnimationFrame(() => scrollToBottom("smooth"));
+            void markConversationReadAction({
+              familyId,
+              conversationId: activeConvId,
+              lastMessageId: incoming.id,
+            });
+          } else if (row.sender_member_id !== data.currentMemberId) {
+            setShowNewMessagesPill(true);
+          }
         }
       )
       .on(
@@ -345,13 +368,17 @@ export function FamilyChatView({
         const senderName = String(payload.payload?.displayName ?? t("chat.someoneFallback"));
         if (!senderId || senderId === data.currentMemberId) return;
         setTypingMembers((prev) => ({ ...prev, [senderId]: senderName }));
-        setTimeout(() => {
+        const prevTimer = typingTimersRef.current.get(senderId);
+        if (prevTimer) clearTimeout(prevTimer);
+        const timer = setTimeout(() => {
+          typingTimersRef.current.delete(senderId);
           setTypingMembers((prev) => {
             const copy = { ...prev };
             delete copy[senderId];
             return copy;
           });
         }, 3500);
+        typingTimersRef.current.set(senderId, timer);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -363,9 +390,13 @@ export function FamilyChatView({
       });
 
     typingChannelRef.current = channel;
+    const typingTimers = typingTimersRef.current;
 
     return () => {
       typingChannelRef.current = null;
+      typingTimers.forEach((timer) => clearTimeout(timer));
+      typingTimers.clear();
+      setTypingMembers({});
       supabase.removeChannel(channel);
     };
   }, [
@@ -398,11 +429,14 @@ export function FamilyChatView({
     setReplyTo(null);
     setEditingMsg(null);
     setShowNewMessagesPill(false);
+    setTypingMembers({});
 
     if (!messagesByConv[convId]) {
       setLoadingThread(true);
       await syncLatestMessages(convId);
       setLoadingThread(false);
+      requestAnimationFrame(() => scrollToBottom("auto"));
+      return;
     }
 
     const currentMsgs = messagesByConv[convId] ?? [];
@@ -805,7 +839,7 @@ export function FamilyChatView({
       : [];
 
   return (
-    <div className="flex h-[calc(100dvh-10.5rem)] lg:h-[calc(100dvh-5.5rem)] flex-col overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-[var(--shadow-card)]">
+    <div className="flex h-[calc(100dvh-8.75rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] lg:h-[calc(100dvh-5.5rem)] flex-col overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-[var(--shadow-card)]">
       <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[300px_1fr]">
         {/* Conversation List Sidebar */}
         <aside
@@ -902,7 +936,7 @@ export function FamilyChatView({
                 type="button"
                 aria-label={t("chat.backAria")}
                 onClick={() => setMobileShowThread(false)}
-                className="rounded-xl p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] md:hidden cursor-pointer"
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] md:hidden cursor-pointer"
               >
                 <ArrowLeft className="h-5 w-5" />
               </button>
@@ -1013,19 +1047,29 @@ export function FamilyChatView({
                 />
               </div>
             ) : (
-              activeMessages.map((msg) => {
+              activeMessages.map((msg, idx) => {
                 const isMe = msg.senderMemberId === data.currentMemberId;
                 const isDeleted = Boolean(msg.deletedAt);
                 const isImage = isChatImageMimeType(msg.attachmentMimeType);
+                const msgDay = msg.createdAt.slice(0, 10);
+                const prevDay = idx > 0 ? activeMessages[idx - 1].createdAt.slice(0, 10) : null;
+                const showDateDivider = idx === 0 || msgDay !== prevDay;
 
                 return (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      "group flex flex-col gap-1",
-                      isMe ? "items-end" : "items-start"
+                  <React.Fragment key={msg.id}>
+                    {showDateDivider && (
+                      <div className="my-2 flex justify-center">
+                        <span className="rounded-full bg-[var(--bg-subtle)] px-3 py-1 text-[11.5px] font-medium text-[var(--text-secondary)]">
+                          {formatLocalizedDate(msg.createdAt, locale)}
+                        </span>
+                      </div>
                     )}
-                  >
+                    <div
+                      className={cn(
+                        "group flex flex-col gap-1",
+                        isMe ? "items-end" : "items-start"
+                      )}
+                    >
                     <div className="flex items-center gap-2 px-1 text-[11.5px] text-[var(--text-muted)]">
                       <span className="font-medium text-[var(--text-secondary)]">
                         {isMe ? t("chat.youLabel") : msg.senderName}
@@ -1078,7 +1122,7 @@ export function FamilyChatView({
                               type="button"
                               onClick={() => void handleOpenAttachment(msg)}
                               className={cn(
-                                "mt-2 flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-medium cursor-pointer",
+                                "mt-2 flex max-w-full min-w-0 min-h-11 sm:min-h-0 items-center gap-2 rounded-xl px-3 py-2 sm:px-2.5 sm:py-1.5 text-left text-[12.5px] font-medium cursor-pointer",
                                 isMe
                                   ? "bg-black/15 text-white hover:bg-black/25"
                                   : "bg-[var(--bg-subtle)] text-[var(--text-primary)] hover:bg-[var(--border-subtle)]"
@@ -1089,11 +1133,11 @@ export function FamilyChatView({
                               ) : (
                                 <FileText className="h-4 w-4 shrink-0" />
                               )}
-                              <span className="truncate max-w-[200px]">
+                              <span className="min-w-0 truncate">
                                 {msg.attachmentName}
                               </span>
                               {msg.attachmentSizeBytes ? (
-                                <span className="text-[11px] opacity-80">
+                                <span className="shrink-0 text-[11px] opacity-80">
                                   ({formatBytes(msg.attachmentSizeBytes)})
                                 </span>
                               ) : null}
@@ -1113,7 +1157,7 @@ export function FamilyChatView({
                             title={r.memberNames.join(", ")}
                             onClick={() => void handleToggleReaction(msg, r.emoji)}
                             className={cn(
-                              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11.5px] cursor-pointer",
+                              "inline-flex min-h-11 sm:min-h-0 items-center gap-1 rounded-full border px-3 py-1 sm:px-2 sm:py-0.5 text-[11.5px] cursor-pointer",
                               r.reactedByMe
                                 ? "border-[var(--accent-primary)] bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
                                 : "border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-secondary)]"
@@ -1127,7 +1171,7 @@ export function FamilyChatView({
                     )}
 
                     {/* Delivery status / Retry / Hover Actions */}
-                    <div className="flex items-center gap-1.5 px-1">
+                    <div className="flex max-w-full flex-wrap items-center gap-1.5 px-1">
                       {isMe && msg.deliveryStatus === "sending" && (
                         <span className="text-[11px] text-[var(--text-muted)]">
                           {t("chat.sendingStatus")}
@@ -1137,7 +1181,7 @@ export function FamilyChatView({
                         <button
                           type="button"
                           onClick={() => void handleRetry(msg)}
-                          className="inline-flex items-center gap-1 rounded-full bg-[var(--tint-peach)] px-2 py-0.5 text-[11px] font-medium text-[var(--tint-peach-fg)] cursor-pointer"
+                          className="inline-flex min-h-11 sm:min-h-0 items-center gap-1 rounded-full bg-[var(--tint-peach)] px-3 py-1 sm:px-2 sm:py-0.5 text-[11px] font-medium text-[var(--tint-peach-fg)] cursor-pointer"
                         >
                           <RefreshCw className="h-3 w-3" />
                           {t("chat.failedRetry")}
@@ -1146,15 +1190,17 @@ export function FamilyChatView({
                       {isMe &&
                         msg.id === latestMyMessage?.id &&
                         msg.deliveryStatus === "sent" && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                          <span className="inline-flex max-w-full items-center gap-1 truncate text-[11px] text-[var(--text-muted)]">
                             {readByOthers.length > 0 ? (
                               <>
-                                <CheckCheck className="h-3.5 w-3.5 text-[var(--accent-primary)]" />
-                                {t("chat.seenBy", { names: readByOthers.join(", ") })}
+                                <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[var(--accent-primary)]" />
+                                <span className="truncate">
+                                  {t("chat.seenBy", { names: readByOthers.join(", ") })}
+                                </span>
                               </>
                             ) : (
                               <>
-                                <Check className="h-3.5 w-3.5" />
+                                <Check className="h-3.5 w-3.5 shrink-0" />
                                 {t("chat.sentStatus")}
                               </>
                             )}
@@ -1162,12 +1208,12 @@ export function FamilyChatView({
                         )}
 
                       {!isDeleted && msg.deliveryStatus === "sent" && (
-                        <div className="flex items-center gap-1 opacity-85 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <div className="flex flex-wrap items-center gap-0.5 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
                             aria-label={t("chat.replyAria")}
                             onClick={() => setReplyTo(msg)}
-                            className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                            className="flex h-11 w-11 sm:h-7 sm:w-7 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
                           >
                             <Reply className="h-3.5 w-3.5" />
                           </button>
@@ -1176,7 +1222,7 @@ export function FamilyChatView({
                               key={emoji}
                               type="button"
                               onClick={() => void handleToggleReaction(msg, emoji)}
-                              className="rounded-lg px-1 py-0.5 text-[12px] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                              className="flex h-11 w-11 sm:h-7 sm:w-7 items-center justify-center rounded-lg text-[13px] sm:text-[12px] hover:bg-[var(--bg-subtle)] cursor-pointer"
                             >
                               {emoji}
                             </button>
@@ -1185,7 +1231,7 @@ export function FamilyChatView({
                             type="button"
                             aria-label={msg.isPinned ? t("chat.unpinAria") : t("chat.pinAria")}
                             onClick={() => void handleTogglePin(msg)}
-                            className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                            className="flex h-11 w-11 sm:h-7 sm:w-7 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
                           >
                             <Pin className="h-3.5 w-3.5" />
                           </button>
@@ -1198,7 +1244,7 @@ export function FamilyChatView({
                                   setEditingMsg(msg);
                                   setEditBody(msg.body);
                                 }}
-                                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                                className="flex h-11 w-11 sm:h-7 sm:w-7 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
                               >
                                 <Edit3 className="h-3.5 w-3.5" />
                               </button>
@@ -1206,7 +1252,7 @@ export function FamilyChatView({
                                 type="button"
                                 aria-label={t("chat.deleteAria")}
                                 onClick={() => void handleDelete(msg)}
-                                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                                className="flex h-11 w-11 sm:h-7 sm:w-7 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
@@ -1216,6 +1262,7 @@ export function FamilyChatView({
                       )}
                     </div>
                   </div>
+                  </React.Fragment>
                 );
               })
             )}
@@ -1227,7 +1274,7 @@ export function FamilyChatView({
               <button
                 type="button"
                 onClick={() => scrollToBottom("smooth")}
-                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-primary)] px-3.5 py-1.5 text-[12.5px] font-semibold text-[var(--accent-primary-fg)] shadow-[var(--shadow-float)] cursor-pointer"
+                className="pointer-events-auto inline-flex min-h-11 sm:min-h-0 items-center gap-1.5 rounded-full bg-[var(--accent-primary)] px-4 py-2 sm:px-3.5 sm:py-1.5 text-[12.5px] font-semibold text-[var(--accent-primary-fg)] shadow-[var(--shadow-float)] cursor-pointer"
               >
                 <ArrowDown className="h-3.5 w-3.5" />
                 {t("chat.newMessagesPill")}
@@ -1237,15 +1284,17 @@ export function FamilyChatView({
 
           {/* Reply / Edit / Pending Attachment Bars + Composer */}
           {activeConvId && (
-            <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))]">
+            <div className="shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2.5">
               {editingMsg ? (
                 <form onSubmit={handleSaveEdit} className="flex items-center gap-2">
-                  <Input
-                    value={editBody}
-                    onChange={(e) => setEditBody(e.target.value)}
-                    placeholder={t("chat.editPlaceholder")}
-                    autoFocus
-                  />
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                      placeholder={t("chat.editPlaceholder")}
+                      autoFocus
+                    />
+                  </div>
                   <Button type="submit" size="sm">
                     {t("common.save")}
                   </Button>
@@ -1261,15 +1310,16 @@ export function FamilyChatView({
               ) : (
                 <>
                   {replyTo && (
-                    <div className="mb-2 flex items-center justify-between rounded-xl bg-[var(--bg-subtle)] px-3 py-1.5 text-[12px]">
-                      <span className="truncate">
+                    <div className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-[var(--bg-subtle)] px-3 py-1.5 text-[12px]">
+                      <span className="min-w-0 truncate">
                         {t("chat.replyingTo", { sender: replyTo.senderName })}{" "}
                         {replyTo.body || replyTo.attachmentName || t("chat.attachmentLabel")}
                       </span>
                       <button
                         type="button"
+                        aria-label={t("common.cancel")}
                         onClick={() => setReplyTo(null)}
-                        className="p-0.5 text-[var(--text-muted)] cursor-pointer"
+                        className="flex h-11 w-11 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] cursor-pointer"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -1277,24 +1327,44 @@ export function FamilyChatView({
                   )}
 
                   {pendingFile && (
-                    <div className="mb-2 flex items-center justify-between rounded-xl bg-[var(--tint-sage)]/50 px-3 py-1.5 text-[12px]">
-                      <span className="truncate font-medium">
-                        {t("chat.attachedFile", {
-                          name: pendingFile.name,
-                          size: `${Math.max(1, Math.round(pendingFile.size / 1024))} KB`,
-                        })}
-                      </span>
+                    <div className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-[var(--tint-sage)]/50 px-3 py-1.5 text-[12px]">
+                      <div className="flex min-w-0 items-center gap-2">
+                        {pendingPreviewUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={pendingPreviewUrl}
+                            alt={pendingFile.name}
+                            className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                          />
+                        )}
+                        <span className="min-w-0 truncate font-medium">
+                          {t("chat.attachedFile", {
+                            name: pendingFile.name,
+                            size: `${Math.max(1, Math.round(pendingFile.size / 1024))} KB`,
+                          })}
+                        </span>
+                      </div>
                       <button
                         type="button"
+                        aria-label={t("common.cancel")}
                         onClick={() => setPendingFile(null)}
-                        className="p-0.5 text-[var(--text-muted)] cursor-pointer"
+                        className="flex h-11 w-11 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] cursor-pointer"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   )}
 
-                  <form onSubmit={handleSend} className="flex items-center gap-2">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (composerRef.current) {
+                        composerRef.current.style.height = "auto";
+                      }
+                      void handleSend(e);
+                    }}
+                    className="flex items-end gap-2"
+                  >
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -1326,14 +1396,27 @@ export function FamilyChatView({
                     >
                       <Paperclip className="h-4 w-4" />
                     </Button>
-                    <Input
+                    <textarea
+                      ref={composerRef}
+                      rows={1}
                       value={draft}
                       onChange={(e) => {
                         setDraft(e.target.value);
                         broadcastTyping();
+                        e.currentTarget.style.height = "auto";
+                        e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 128)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          if (draft.trim() || pendingFile) {
+                            e.currentTarget.form?.requestSubmit();
+                          }
+                        }
                       }}
                       placeholder={t("chat.messagePlaceholder", { title: activeConversation?.title ?? "" })}
-                      className="flex-1"
+                      aria-label={t("chat.messagePlaceholder", { title: activeConversation?.title ?? "" })}
+                      className="min-h-11 max-h-32 min-w-0 flex-1 resize-none rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3.5 py-2.5 text-[16px] sm:text-[14.5px] leading-snug text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-primary)] focus:outline-none"
                     />
                     <Button
                       type="submit"
@@ -1370,7 +1453,7 @@ export function FamilyChatView({
                     key={m.id}
                     type="button"
                     onClick={() => void handleStartDirectChat(m.id)}
-                    className="flex w-full items-center justify-between rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-left text-[14px] font-medium hover:bg-[var(--bg-subtle)] cursor-pointer"
+                    className="flex min-h-11 w-full items-center justify-between rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-left text-[14px] font-medium hover:bg-[var(--bg-subtle)] cursor-pointer"
                   >
                     <span>{m.displayName}</span>
                     <SmilePlus className="h-4 w-4 text-[var(--text-muted)]" />
@@ -1393,11 +1476,12 @@ export function FamilyChatView({
               required
             />
             {data.canParticipateAdultsOnly && (
-              <label className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+              <label className="flex min-h-11 sm:min-h-0 items-center gap-2.5 text-[13px] text-[var(--text-secondary)] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={newChannelAdultsOnly}
                   onChange={(e) => setNewChannelAdultsOnly(e.target.checked)}
+                  className="h-4 w-4 accent-[#315C49]"
                 />
                 {t("chat.adultsOnlyCheckbox")}
               </label>

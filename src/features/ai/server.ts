@@ -61,6 +61,7 @@ export async function getAiAssistantPageData(
         .select("id", { count: "exact", head: true })
         .eq("family_id", familyId)
         .eq("member_id", actor.id)
+        .eq("status", "ok")
         .gte("created_at", oneHourAgo),
     ]);
 

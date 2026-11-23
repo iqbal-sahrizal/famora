@@ -94,7 +94,7 @@ export async function getBudgetsBillsPageData(
       { data: payHistData },
     ] = await Promise.all([
       supabase.from("families").select("currency_code, timezone").eq("id", familyId).maybeSingle(),
-      supabase.from("finance_accounts").select("id, name").eq("family_id", familyId),
+      supabase.from("finance_accounts").select("id, name").eq("family_id", familyId).eq("is_archived", false),
       supabase.from("finance_budgets").select("*").eq("family_id", familyId).order("period_start", { ascending: false }),
       supabase
         .from("finance_transactions")

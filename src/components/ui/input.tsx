@@ -50,7 +50,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             aria-invalid={Boolean(error)}
             aria-describedby={error ? errorId : hint ? hintId : undefined}
             className={cn(
-              "h-11 w-full rounded-xl bg-[var(--bg-subtle)] px-3.5 text-[14.5px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors duration-150",
+              "h-11 w-full rounded-xl bg-[var(--bg-subtle)] px-3.5 text-[16px] sm:text-[14.5px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors duration-150",
               "border border-transparent focus:border-[var(--accent-primary)] focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/15",
               error && "border-[var(--status-danger)] focus:border-[var(--status-danger)] focus:ring-[var(--status-danger)]/15",
               leadingIcon && "pl-10",

@@ -19,7 +19,7 @@ export const PasswordField = React.forwardRef<
           type="button"
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Hide password" : "Show password"}
-          className="rounded-lg p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] cursor-pointer"
+          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] cursor-pointer"
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>

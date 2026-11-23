@@ -25,6 +25,15 @@ export const metadata: Metadata = {
     template: `%s · ${siteConfig.name}`,
   },
   description: siteConfig.description,
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -37,8 +46,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#2F6B4E" },
-    { media: "(prefers-color-scheme: dark)", color: "#141A16" },
+    { media: "(prefers-color-scheme: light)", color: "#315C49" },
+    { media: "(prefers-color-scheme: dark)", color: "#161917" },
   ],
 };
 
@@ -58,7 +67,7 @@ export default async function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${jakarta.variable}`}
     >
-      <body className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] selection:bg-[var(--tint-sage)] selection:text-[var(--tint-sage-fg)]">
+      <body className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)] selection:bg-[var(--tint-sage)] selection:text-[var(--tint-sage-fg)]">
         <AppProviders initialLocale={initialLocale}>{children}</AppProviders>
       </body>
     </html>
