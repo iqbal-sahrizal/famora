@@ -28,7 +28,7 @@ export function AppProviders({
         <QueryProvider>
           {children}
           <Toaster
-            position="bottom-right"
+            position="top-center"
             toastOptions={{
               style: {
                 background: "var(--bg-surface)",
