@@ -28,7 +28,12 @@ import { Select } from "@/components/ui/select";
 import { useOfflineCachedData } from "@/hooks/use-offline-cached-data";
 import { toIntlLocale } from "@/lib/i18n";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { cn, formatCurrency } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  getCurrencyPrefix,
+  sanitizeNumericCurrencyInput,
+} from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
 import {
   addShoppingItemAction,
@@ -78,7 +83,9 @@ export function FamilyShoppingView({
   const [quickName, setQuickName] = React.useState("");
   const [quickCategory, setQuickCategory] = React.useState("Groceries");
   const [quickQty, setQuickQty] = React.useState("1");
+  const [quickPrice, setQuickPrice] = React.useState("");
   const [quickShopper, setQuickShopper] = React.useState("");
+  const currencyPrefix = getCurrencyPrefix(effectiveData.currencyCode);
   const [busy, setBusy] = React.useState(false);
 
   const [newListOpen, setNewListOpen] = React.useState(false);
@@ -167,6 +174,11 @@ export function FamilyShoppingView({
   const handleQuickAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickName.trim()) return;
+    const quickPriceFloat = Number.parseFloat(quickPrice);
+    const quickPriceCents =
+      Number.isFinite(quickPriceFloat) && quickPriceFloat > 0
+        ? Math.round(quickPriceFloat * 100)
+        : 0;
 
     if (!isOnline) {
       const mutation = createQueuedShoppingMutation(familyId, "add_item", {
@@ -175,7 +187,7 @@ export function FamilyShoppingView({
         category: quickCategory,
         quantity: quickQty || "1",
         unit: "pcs",
-        estimatedPriceCents: 0,
+        estimatedPriceCents: quickPriceCents,
         notes: "",
         assignedShopperMemberId: quickShopper || null,
       });
@@ -191,7 +203,7 @@ export function FamilyShoppingView({
           category: quickCategory,
           quantity: quickQty || "1",
           unit: "pcs",
-          estimatedPriceCents: 0,
+          estimatedPriceCents: quickPriceCents,
           notes: "",
           isChecked: false,
           assignedShopperName: shopperName,
@@ -201,6 +213,7 @@ export function FamilyShoppingView({
         ...prev,
       ]);
       setQuickName("");
+      setQuickPrice("");
       toast.info(t("shopping.toast.offlineAdd"));
       return;
     }
@@ -213,7 +226,7 @@ export function FamilyShoppingView({
       category: quickCategory,
       quantity: quickQty || "1",
       unit: "pcs",
-      estimatedPriceCents: 0,
+      estimatedPriceCents: quickPriceCents,
       notes: "",
       assignedShopperMemberId: quickShopper || null,
       clientMutationId: crypto.randomUUID(),
@@ -223,6 +236,7 @@ export function FamilyShoppingView({
     if (!res.ok) toast.error(te(res.error));
     else {
       setQuickName("");
+      setQuickPrice("");
       router.refresh();
     }
   };
@@ -554,7 +568,7 @@ export function FamilyShoppingView({
         <Card className="p-4">
           <form
             onSubmit={handleQuickAdd}
-            className="grid gap-3 sm:grid-cols-[1.6fr_0.6fr_0.9fr_0.9fr_auto] sm:items-end"
+            className="grid gap-3 sm:grid-cols-[1.4fr_0.5fr_0.8fr_0.8fr_0.8fr_auto] sm:items-end"
           >
             <Input
               placeholder={t("shopping.quickAddPlaceholder")}
@@ -566,6 +580,20 @@ export function FamilyShoppingView({
               placeholder={t("shopping.qtyPlaceholder")}
               value={quickQty}
               onChange={(e) => setQuickQty(e.target.value)}
+            />
+            <Input
+              aria-label={t("shopping.priceOptionalLabel")}
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              leadingIcon={
+                <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
+                  {currencyPrefix}
+                </span>
+              }
+              value={quickPrice}
+              onChange={(e) => setQuickPrice(sanitizeNumericCurrencyInput(e.target.value))}
+              className="tabular-nums"
             />
             <Select
               aria-label={t("shopping.categoryAria")}
@@ -940,12 +968,16 @@ export function FamilyShoppingView({
             />
             <Input
               label={t("shopping.priceOptionalLabel")}
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              leadingIcon={
+                <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
+                  {currencyPrefix}
+                </span>
+              }
               value={editItemPrice}
-              onChange={(e) => setEditItemPrice(e.target.value)}
+              onChange={(e) => setEditItemPrice(sanitizeNumericCurrencyInput(e.target.value))}
               className="tabular-nums"
             />
           </div>

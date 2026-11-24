@@ -32,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
 import { formatLocalizedDate, toIntlLocale } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import { cn, getCurrencyPrefix, sanitizeNumericCurrencyInput } from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
 import {
   archiveFinanceAccountAction,
@@ -681,9 +681,16 @@ export function FamilyFinanceView({
             <Input
               label={t("finance.modal.amountLabel")}
               required
-              placeholder="45.50"
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              leadingIcon={
+                <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
+                  {getCurrencyPrefix(data.currencyCode)}
+                </span>
+              }
               value={txAmount}
-              onChange={(e) => setTxAmount(e.target.value)}
+              onChange={(e) => setTxAmount(sanitizeNumericCurrencyInput(e.target.value))}
               className="tabular-nums"
             />
           </div>
