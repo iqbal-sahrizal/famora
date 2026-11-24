@@ -53,6 +53,14 @@ export function PwaStatusBar({ familyId }: { familyId: string }) {
     }
   };
 
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+
+  const handleFullRefresh = () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    window.location.reload();
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       {!isOnline && (
@@ -129,6 +137,17 @@ export function PwaStatusBar({ familyId }: { familyId: string }) {
           {t("pwa.updateReady")}
         </button>
       )}
+
+      <button
+        type="button"
+        onClick={handleFullRefresh}
+        disabled={isRefreshing}
+        aria-label={t("pwa.refreshPage")}
+        title={t("pwa.refreshPage")}
+        className="flex h-11 w-11 items-center justify-center rounded-xl text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] disabled:opacity-60 cursor-pointer sm:h-9 sm:w-9"
+      >
+        <RefreshCw className={isRefreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+      </button>
     </div>
   );
 }

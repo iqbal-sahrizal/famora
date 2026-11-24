@@ -146,15 +146,15 @@ export default async function HomePage() {
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
               <FileLock2 className="h-4 w-4" />
-              Row-Level Security Enforced
+              Private Family Workspace
             </span>
             <span className="inline-flex items-center gap-1.5">
               <MessageCircle className="h-4 w-4" />
-              Realtime &amp; Offline PWA
+              Web &amp; Mobile Ready
             </span>
           </div>
           <span className="font-medium text-[var(--text-secondary)]">
-            Famora · Private Family Workspace
+            Famora
           </span>
         </footer>
       </main>

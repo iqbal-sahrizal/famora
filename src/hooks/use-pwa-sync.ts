@@ -143,7 +143,12 @@ export function usePwaSync(familyId?: string) {
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
+    const cap = (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    const isNativeApp =
+      (typeof cap?.isNativePlatform === "function" && Boolean(cap.isNativePlatform())) ||
+      document.referrer.startsWith("android-app://");
     const standalone =
+      isNativeApp ||
       window.matchMedia("(display-mode: standalone)").matches ||
       (navigator as { standalone?: boolean }).standalone === true;
     setIsInstalled(standalone);

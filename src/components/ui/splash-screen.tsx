@@ -32,8 +32,8 @@ export function FamoraSplashScreen({
             {label}
           </p>
           {!error && (
-            <div className="mx-auto mt-2 h-1 w-16 overflow-hidden rounded-full bg-[var(--bg-subtle)]">
-              <div className="h-full w-1/2 rounded-full bg-[var(--accent-primary)] motion-safe:animate-pulse" />
+            <div className="mx-auto mt-2 h-1 w-24 overflow-hidden rounded-full bg-[var(--bg-subtle)]">
+              <div className="famora-progress-bar h-full w-1/2 rounded-full bg-[var(--accent-primary)]" />
             </div>
           )}
         </div>

@@ -11,8 +11,13 @@ import { useLocale } from "@/providers/locale-provider";
 export function PwaInstallCard({ familyId }: { familyId: string }) {
   const { t } = useLocale();
   const { isInstalled, canInstall, promptInstall } = usePwaSync(familyId);
+  const [mounted, setMounted] = React.useState(false);
 
-  if (isInstalled) return null;
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || isInstalled) return null;
 
   return (
     <Card className="space-y-3 p-4">

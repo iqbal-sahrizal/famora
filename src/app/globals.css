@@ -139,6 +139,19 @@
   animation: famora-shimmer 1.6s ease-in-out infinite;
 }
 
+@keyframes famora-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.famora-progress-bar {
+  animation: famora-progress-slide 1.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

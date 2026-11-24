@@ -117,6 +117,7 @@ export const MESSAGES = {
     "pwa.installAccepted": "Famora sedang dipasang ke perangkat Anda.",
     "pwa.installDismissed": "Pemasangan aplikasi dilewati untuk sesi ini.",
     "pwa.manualInstallTitle": "Pasang Famora di Perangkat Anda",
+    "pwa.refreshPage": "Muat ulang halaman",
     "pwa.manualInstallDesc": "Tambahkan Famora ke layar utama untuk akses cepat dan mode layar penuh.",
     "pwa.manualInstallIos": "Safari iOS: ketuk ikon Bagikan (Share), lalu pilih \"Tambah ke Layar Utama\" (Add to Home Screen).",
     "pwa.manualInstallAndroid": "Chrome / Android: buka menu browser (⋮), lalu pilih \"Pasang aplikasi\" atau \"Tambahkan ke layar utama\".",
@@ -1257,7 +1258,6 @@ export const MESSAGES = {
     // Notifications categories
 
     // AppShell & Dashboard Complete
-    "shell.designSystem": "Sistem Desain",
     "shell.newFamilyOption": "+ Keluarga Baru",
     "shell.signOutResumeNote": "Anda dapat masuk kembali kapan saja untuk melanjutkan ruang kerja keluarga Anda.",
     "dashboard.greeting.morning": "Selamat pagi",
@@ -1888,6 +1888,7 @@ export const MESSAGES = {
     "pwa.installAccepted": "Installing Famora on your device.",
     "pwa.installDismissed": "App installation dismissed for this session.",
     "pwa.manualInstallTitle": "Install Famora on Your Device",
+    "pwa.refreshPage": "Refresh page",
     "pwa.manualInstallDesc": "Add Famora to your home screen for fast launch and standalone mode.",
     "pwa.manualInstallIos": "iOS Safari: tap the Share button, then choose \"Add to Home Screen\".",
     "pwa.manualInstallAndroid": "Chrome / Android: open the browser menu (⋮), then choose \"Install app\" or \"Add to Home screen\".",
@@ -3028,7 +3029,6 @@ export const MESSAGES = {
     // Notifications categories
 
     // AppShell & Dashboard Complete
-    "shell.designSystem": "Design System",
     "shell.newFamilyOption": "+ New Family",
     "shell.signOutResumeNote": "You can sign back in anytime to resume your family workspace.",
     "dashboard.greeting.morning": "Good morning",

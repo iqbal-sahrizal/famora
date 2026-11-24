@@ -2,7 +2,6 @@ import type { DomainId } from "@/types/domain";
 
 export const routes = {
   home: "/",
-  designSystem: "/design-system",
   login: "/login",
   signup: "/signup",
   forgotPassword: "/forgot-password",

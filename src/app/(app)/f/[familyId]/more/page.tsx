@@ -43,7 +43,7 @@ export default async function FamilyMorePage({
       <PwaInstallCard familyId={familyId} />
 
       <Section title={translate(locale, "shell.accountProfile")}>
-        <Card className="divide-y divide-[var(--border-subtle)] overflow-hidden">
+        <Card className="divide-y divide-[var(--border-subtle)] overflow-hidden p-0">
           <Link
             href={routes.account}
             className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--bg-subtle)]"
@@ -80,7 +80,7 @@ export default async function FamilyMorePage({
           const items = DOMAIN_NAV_ITEMS.filter((item) => item.group === group);
           return (
             <Section key={group} title={translateNavGroup(group, locale)}>
-              <Card className="divide-y divide-[var(--border-subtle)] overflow-hidden">
+              <Card className="divide-y divide-[var(--border-subtle)] overflow-hidden p-0">
                 {items.map((item) => {
                   const Icon = item.icon;
                   return (
