@@ -66,6 +66,7 @@ export async function getAnalyticsPageData(
     const MAX_PAGES = 50;
     type RawAnalyticsTxRow = {
       id: string;
+      account_id: string;
       merchant: string;
       category: string;
       kind: "income" | "expense" | "transfer";
@@ -81,7 +82,7 @@ export async function getAnalyticsPageData(
         const to = from + PAGE_SIZE - 1;
         const { data: batch, error } = await supabase
           .from("finance_transactions")
-          .select("id, merchant, category, kind, amount_numeric, occurred_on, is_reversed")
+          .select("id, account_id, merchant, category, kind, amount_numeric, occurred_on, is_reversed")
           .eq("family_id", familyId)
           .gte("occurred_on", windowStart)
           .order("occurred_on", { ascending: false })
@@ -94,9 +95,10 @@ export async function getAnalyticsPageData(
       return rows;
     };
 
-    const [{ data: fam }, txData, { data: goalsData }, { data: debtsData }] =
+    const [{ data: fam }, { data: accData }, txData, { data: goalsData }, { data: debtsData }] =
       await Promise.all([
         supabase.from("families").select("currency_code").eq("id", familyId).maybeSingle(),
+        supabase.from("finance_accounts").select("id, name").eq("family_id", familyId),
         fetchAllWindowedTransactions(),
         supabase
           .from("finance_goals")
@@ -110,12 +112,18 @@ export async function getAnalyticsPageData(
           .order("created_at", { ascending: false }),
       ]);
 
+    const accountNameMap = new Map<string, string>(
+      ((accData as Array<{ id: string; name: string }> | null) ?? []).map((a) => [a.id, a.name])
+    );
+
     return {
       authorized: true,
       canManageTransactions,
       currencyCode: fam?.currency_code ?? "USD",
       transactions: (txData ?? []).map((t) => ({
         id: t.id,
+        accountId: t.account_id,
+        accountName: accountNameMap.get(t.account_id) ?? "Akun",
         merchant: t.merchant,
         category: t.category,
         kind: t.kind,

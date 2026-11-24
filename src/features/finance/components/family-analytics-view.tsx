@@ -27,6 +27,7 @@ import { formatLocalizedDate, toIntlLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
 import {
+  buildAccountExpenseBreakdown,
   buildCategoryBreakdown,
   buildMonthlyCashFlow,
   computePeriodSummary,
@@ -118,6 +119,7 @@ export function FamilyAnalyticsView({
   const summary = computePeriodSummary(currentTxs);
   const prevSummary = computePeriodSummary(prevTxs);
   const categories = buildCategoryBreakdown(currentTxs);
+  const accountBreakdown = buildAccountExpenseBreakdown(currentTxs, activeFlowMonth);
   const cashFlow = buildMonthlyCashFlow(currentTxs);
 
   const maxFlowMinor = cashFlow.reduce((max, pt) => {
@@ -417,6 +419,45 @@ export function FamilyAnalyticsView({
                         <div
                           className="h-full rounded-full bg-[var(--accent-primary)]"
                           style={{ width: `${cat.sharePct}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            {/* Account Expense Breakdown */}
+            <Card className="space-y-4 p-6 lg:col-span-2">
+              <CardHeader className="mb-0">
+                <CardTitle>
+                  {t("analytics.accountBreakdownTitle")}
+                  {activeFlowMonth ? ` (${activeFlowMonth})` : ""}
+                </CardTitle>
+              </CardHeader>
+              {accountBreakdown.length === 0 ? (
+                <p className="text-[13.5px] text-[var(--text-secondary)]">
+                  {t("analytics.noExpenses")}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {accountBreakdown.map((acc, idx) => (
+                    <div key={acc.accountName} className="space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] tabular-nums">
+                        <span className="inline-flex items-center gap-2 font-medium">
+                          {acc.accountName}
+                          {idx === 0 && (
+                            <Badge variant="peach">{t("analytics.topSpenderBadge")}</Badge>
+                          )}
+                        </span>
+                        <span>
+                          {formatNumericCurrency(acc.amountNumeric, data.currencyCode, intlLocale)} ({acc.sharePct}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
+                        <div
+                          className="h-full rounded-full bg-[var(--accent-primary)]"
+                          style={{ width: `${acc.sharePct}%` }}
                         />
                       </div>
                     </div>

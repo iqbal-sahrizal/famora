@@ -2,6 +2,8 @@ import { minorUnitsToDecimalString, parseDecimalToMinorUnits } from "./money";
 
 export interface AnalyticsTxInput {
   id: string;
+  accountId?: string;
+  accountName?: string;
   merchant: string;
   category: string;
   kind: "income" | "expense" | "transfer" | "reversal";
@@ -18,6 +20,12 @@ export interface PeriodSummary {
 
 export interface CategoryBreakdownItem {
   category: string;
+  amountNumeric: string;
+  sharePct: number;
+}
+
+export interface AccountBreakdownItem {
+  accountName: string;
   amountNumeric: string;
   sharePct: number;
 }
@@ -74,6 +82,31 @@ export function buildCategoryBreakdown(
     .sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0))
     .map(([category, amt]) => ({
       category,
+      amountNumeric: minorUnitsToDecimalString(amt),
+      sharePct: totalExpense > 0n ? Number((amt * 100n) / totalExpense) : 0,
+    }));
+}
+
+export function buildAccountExpenseBreakdown(
+  txs: AnalyticsTxInput[],
+  monthKey?: string | null
+): AccountBreakdownItem[] {
+  const byAccount = new Map<string, bigint>();
+  let totalExpense = 0n;
+
+  for (const tx of txs) {
+    if (tx.isReversed || tx.kind !== "expense") continue;
+    if (monthKey && !tx.occurredOn.startsWith(monthKey)) continue;
+    const label = tx.accountName?.trim() || "Akun";
+    const amt = parseDecimalToMinorUnits(tx.amountNumeric);
+    totalExpense += amt;
+    byAccount.set(label, (byAccount.get(label) ?? 0n) + amt);
+  }
+
+  return Array.from(byAccount.entries())
+    .sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0))
+    .map(([accountName, amt]) => ({
+      accountName,
       amountNumeric: minorUnitsToDecimalString(amt),
       sharePct: totalExpense > 0n ? Number((amt * 100n) / totalExpense) : 0,
     }));
