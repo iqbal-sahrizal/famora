@@ -1,9 +1,24 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { clientEnv } from "@/lib/env";
+import { headers } from "next/headers";
+import { resolveAppUrl } from "@/lib/env";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+async function getActionAppUrl(): Promise<string> {
+  try {
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    const proto = h.get("x-forwarded-proto") ?? "https";
+    if (host) {
+      return resolveAppUrl(`${proto}://${host}`);
+    }
+  } catch {
+    // Outside request context (e.g., unit tests)
+  }
+  return resolveAppUrl();
+}
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -65,13 +80,14 @@ export async function registerAction(input: RegisterInput): Promise<AuthActionRe
   }
 
   try {
+    const appUrl = await getActionAppUrl();
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,
       password: parsed.data.password,
       options: {
         data: { full_name: parsed.data.fullName },
-        emailRedirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}${routes.authCallback}?next=${encodeURIComponent(routes.onboarding)}`,
+        emailRedirectTo: `${appUrl}${routes.authCallback}?next=${encodeURIComponent(routes.onboarding)}`,
       },
     });
 
@@ -106,9 +122,10 @@ export async function forgotPasswordAction(
   }
 
   try {
+    const appUrl = await getActionAppUrl();
     const supabase = await createSupabaseServerClient();
     await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-      redirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}${routes.authCallback}?next=${encodeURIComponent(routes.resetPassword)}`,
+      redirectTo: `${appUrl}${routes.authCallback}?next=${encodeURIComponent(routes.resetPassword)}`,
     });
 
     // Always return generic success to prevent email enumeration

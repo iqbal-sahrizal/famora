@@ -18,12 +18,20 @@ android {
     }
     signingConfigs {
         release {
-            def ksPath = System.getenv("FAMORA_KEYSTORE_PATH")
+            def keystorePropsFile = file("keystore.properties")
+            if (!keystorePropsFile.exists()) {
+                keystorePropsFile = rootProject.file("keystore.properties")
+            }
+            def keystoreProps = new Properties()
+            if (keystorePropsFile.exists()) {
+                keystorePropsFile.withInputStream { keystoreProps.load(it) }
+            }
+            def ksPath = keystoreProps.getProperty("storeFile") ?: System.getenv("FAMORA_KEYSTORE_PATH")
             if (ksPath) {
                 storeFile file(ksPath)
-                storePassword System.getenv("FAMORA_KEYSTORE_PASS")
-                keyAlias System.getenv("FAMORA_KEY_ALIAS")
-                keyPassword System.getenv("FAMORA_KEY_PASS")
+                storePassword keystoreProps.getProperty("storePassword") ?: System.getenv("FAMORA_KEYSTORE_PASS")
+                keyAlias keystoreProps.getProperty("keyAlias") ?: System.getenv("FAMORA_KEY_ALIAS")
+                keyPassword keystoreProps.getProperty("keyPassword") ?: System.getenv("FAMORA_KEY_PASS")
             }
         }
     }
@@ -31,7 +39,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            if (System.getenv("FAMORA_KEYSTORE_PATH")) {
+            if (file("keystore.properties").exists() || rootProject.file("keystore.properties").exists() || System.getenv("FAMORA_KEYSTORE_PATH")) {
                 signingConfig signingConfigs.release
             }
         }

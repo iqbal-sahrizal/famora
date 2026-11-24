@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.famora.family",
+      "sha256_cert_fingerprints": [
+        "B3:D9:61:1E:F5:26:7F:A9:D1:74:E2:F7:59:AA:8B:4D:17:DC:3B:FF:77:0A:78:89:D2:CA:43:D2:22:12:CA:3D"
+      ]
+    }
+  }
+]

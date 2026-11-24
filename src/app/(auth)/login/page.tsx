@@ -8,7 +8,7 @@ import { routes } from "@/lib/routes";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirectTo?: string; error?: string }>;
+  searchParams: Promise<{ redirectTo?: string; error?: string; verified?: string }>;
 }) {
   const params = await searchParams;
   const locale = await getRequestLocale();
@@ -29,6 +29,14 @@ export default async function LoginPage({
         </p>
       }
     >
+      {params.verified === "1" && (
+        <div
+          role="status"
+          className="mb-4 rounded-2xl bg-[var(--tint-sage)] px-4 py-3 text-[13.5px] text-[var(--tint-sage-fg)]"
+        >
+          {translate(locale, "auth.login.verifiedSuccess")}
+        </div>
+      )}
       {params.error === "verification_failed" && (
         <div
           role="alert"

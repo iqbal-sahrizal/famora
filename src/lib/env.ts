@@ -39,6 +39,48 @@ function parseClientEnv() {
 
 export const clientEnv = parseClientEnv();
 
+export const PRODUCTION_APP_URL = "https://famora-eight.vercel.app";
+
+function isLocalhostUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Resolves the canonical application origin.
+ * Never returns localhost in production even if NEXT_PUBLIC_APP_URL is unset.
+ */
+export function resolveAppUrl(requestOrigin?: string): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (configured && (!isProd || !isLocalhostUrl(configured))) {
+    return configured;
+  }
+
+  if (requestOrigin) {
+    const normalized = requestOrigin.trim().replace(/\/+$/, "");
+    if (!isProd || !isLocalhostUrl(normalized)) {
+      return normalized;
+    }
+  }
+
+  const vercelProdUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (vercelProdUrl) {
+    return `https://${vercelProdUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  }
+
+  if (isProd) {
+    return PRODUCTION_APP_URL;
+  }
+
+  return clientEnv.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "");
+}
+
 /**
  * Validates and returns server-only environment variables.
  * Throws immediately if called from a browser context.
