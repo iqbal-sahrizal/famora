@@ -28,6 +28,7 @@ import {
 
 export interface ShoppingActionResult {
   ok: boolean;
+  id?: string;
   error?: string;
 }
 
@@ -219,7 +220,7 @@ export async function addShoppingItemAction(
       if (existingItem) {
         revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
         revalidatePath(routes.familyDashboard(parsed.data.familyId));
-        return { ok: true };
+        return { ok: true, id: existingItem.id };
       }
     }
 
@@ -227,6 +228,17 @@ export async function addShoppingItemAction(
 
     if (error && error.code !== "23505") {
       return { ok: false, error: error.message };
+    }
+
+    let insertedId: string | undefined;
+    if (parsed.data.clientMutationId) {
+      const { data: created } = await supabase
+        .from("shopping_items")
+        .select("id")
+        .eq("family_id", parsed.data.familyId)
+        .eq("client_mutation_id", parsed.data.clientMutationId)
+        .maybeSingle<{ id: string }>();
+      insertedId = created?.id;
     }
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
@@ -255,7 +267,7 @@ export async function addShoppingItemAction(
         idempotencyPrefix: `shopping-item:${parsed.data.familyId}:${Date.now()}`,
       });
     }
-    return { ok: true };
+    return { ok: true, id: insertedId };
   } catch (err) {
     return {
       ok: false,
@@ -345,20 +357,38 @@ export async function toggleShoppingCheckAction(
           }
 
           if (accountId) {
-            const amount = Number((Number(item.estimated_price_cents) / 100).toFixed(2));
-            await supabase.rpc("record_finance_transaction", {
-              p_family_id: parsed.data.familyId,
-              p_account_id: accountId,
-              p_kind: "expense",
-              p_amount: amount,
-              p_merchant: item.name,
-              p_category: item.category || "Shopping",
-              p_occurred_on: new Date().toISOString().slice(0, 10),
-              p_notes: `Belanja Keluarga (${item.quantity} ${item.unit})`,
-              p_transfer_account_id: null,
-              p_attachment_name: null,
-              p_idempotency_key: `shopping-purchase:${parsed.data.itemId}`,
-            });
+            const { data: existingTx } = await supabase
+              .from("finance_transactions")
+              .select("id, account_id")
+              .eq("family_id", parsed.data.familyId)
+              .like("idempotency_key", `shopping-purchase:${parsed.data.itemId}%`)
+              .eq("is_reversed", false)
+              .maybeSingle<{ id: string; account_id: string }>();
+
+            if (existingTx && existingTx.account_id !== accountId) {
+              await supabase.rpc("reverse_finance_transaction", {
+                p_family_id: parsed.data.familyId,
+                p_transaction_id: existingTx.id,
+                p_reason: "Shopping account changed",
+              });
+            }
+
+            if (!existingTx || existingTx.account_id !== accountId) {
+              const amount = Number((Number(item.estimated_price_cents) / 100).toFixed(2));
+              await supabase.rpc("record_finance_transaction", {
+                p_family_id: parsed.data.familyId,
+                p_account_id: accountId,
+                p_kind: "expense",
+                p_amount: amount,
+                p_merchant: item.name,
+                p_category: item.category || "Shopping",
+                p_occurred_on: new Date().toISOString().slice(0, 10),
+                p_notes: `Belanja Keluarga (${item.quantity} ${item.unit})`,
+                p_transfer_account_id: null,
+                p_attachment_name: null,
+                p_idempotency_key: `shopping-purchase:${parsed.data.itemId}:${accountId}:${Date.now()}`,
+              });
+            }
             revalidatePath(routes.familyDomain(parsed.data.familyId, "finance"));
             revalidatePath(routes.familyDomain(parsed.data.familyId, "budgets"));
             revalidatePath(routes.familyDomain(parsed.data.familyId, "analytics"));

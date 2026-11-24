@@ -93,17 +93,54 @@ export function FamilyShoppingView({
     () => effectiveData.financeAccounts ?? [],
     [effectiveData.financeAccounts]
   );
+  const storageKey = `famora:shopping-accounts:${familyId}`;
+  const [itemAccountMap, setItemAccountMap] = React.useState<Record<string, string>>({});
   const [selectedFinanceAccountId, setSelectedFinanceAccountId] = React.useState(
     () => financeAccounts[0]?.id ?? ""
   );
+  const [editItemFinanceAccountId, setEditItemFinanceAccountId] = React.useState("");
+
   React.useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          lastAccountId?: string;
+          items?: Record<string, string>;
+        };
+        if (parsed.items) setItemAccountMap(parsed.items);
+        if (
+          parsed.lastAccountId &&
+          financeAccounts.some((a) => a.id === parsed.lastAccountId)
+        ) {
+          setSelectedFinanceAccountId(parsed.lastAccountId);
+          return;
+        }
+      }
+    } catch {
+      // Ignore storage read errors
+    }
     if (
       financeAccounts.length > 0 &&
       !financeAccounts.some((a) => a.id === selectedFinanceAccountId)
     ) {
       setSelectedFinanceAccountId(financeAccounts[0].id);
     }
-  }, [financeAccounts, selectedFinanceAccountId]);
+  }, [financeAccounts, storageKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const persistAccountSelection = React.useCallback(
+    (nextLastId: string, nextItems: Record<string, string>) => {
+      try {
+        window.localStorage.setItem(
+          storageKey,
+          JSON.stringify({ lastAccountId: nextLastId, items: nextItems })
+        );
+      } catch {
+        // Ignore storage write errors
+      }
+    },
+    [storageKey]
+  );
   const currencyPrefix = getCurrencyPrefix(effectiveData.currencyCode);
   const [busy, setBusy] = React.useState(false);
 
@@ -257,6 +294,11 @@ export function FamilyShoppingView({
 
     if (!res.ok) toast.error(te(res.error));
     else {
+      if (res.id && selectedFinanceAccountId) {
+        const nextMap = { ...itemAccountMap, [res.id]: selectedFinanceAccountId };
+        setItemAccountMap(nextMap);
+        persistAccountSelection(selectedFinanceAccountId, nextMap);
+      }
       setQuickName("");
       setQuickPrice("");
       setAddItemOpen(false);
@@ -283,11 +325,13 @@ export function FamilyShoppingView({
     setItemsState((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, isChecked: !current } : it))
     );
+    const targetFinanceAccountId =
+      itemAccountMap[itemId] ?? selectedFinanceAccountId ?? null;
     const res = await toggleShoppingCheckAction({
       familyId,
       itemId,
       isChecked: !current,
-      financeAccountId: selectedFinanceAccountId || null,
+      financeAccountId: targetFinanceAccountId || null,
     });
     if (!res.ok) {
       setItemsState(previous);
@@ -352,6 +396,9 @@ export function FamilyShoppingView({
         : ""
     );
     setEditItemNotes(item.notes ?? "");
+    setEditItemFinanceAccountId(
+      itemAccountMap[item.id] ?? selectedFinanceAccountId ?? financeAccounts[0]?.id ?? ""
+    );
   };
 
   const handleUpdateItem = async (e: React.FormEvent) => {
@@ -377,6 +424,12 @@ export function FamilyShoppingView({
 
     if (!res.ok) toast.error(te(res.error));
     else {
+      if (editItemFinanceAccountId) {
+        const nextMap = { ...itemAccountMap, [editingItem.id]: editItemFinanceAccountId };
+        setItemAccountMap(nextMap);
+        setSelectedFinanceAccountId(editItemFinanceAccountId);
+        persistAccountSelection(editItemFinanceAccountId, nextMap);
+      }
       setEditingItem(null);
       router.refresh();
     }
@@ -748,7 +801,11 @@ export function FamilyShoppingView({
             <Select
               label={t("shopping.financeAccountLabel")}
               value={selectedFinanceAccountId}
-              onChange={(e) => setSelectedFinanceAccountId(e.target.value)}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                setSelectedFinanceAccountId(nextId);
+                persistAccountSelection(nextId, itemAccountMap);
+              }}
               options={financeAccounts.map((a) => ({
                 value: a.id,
                 label: a.name,
@@ -1134,8 +1191,8 @@ export function FamilyShoppingView({
           {financeAccounts.length > 0 && (
             <Select
               label={t("shopping.financeAccountLabel")}
-              value={selectedFinanceAccountId}
-              onChange={(e) => setSelectedFinanceAccountId(e.target.value)}
+              value={editItemFinanceAccountId}
+              onChange={(e) => setEditItemFinanceAccountId(e.target.value)}
               options={financeAccounts.map((a) => ({
                 value: a.id,
                 label: a.name,
