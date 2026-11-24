@@ -46,6 +46,7 @@ import {
   minorUnitsToDecimalString,
   parseDecimalToMinorUnits,
 } from "../money";
+import { buildFinanceCategoryOptions } from "../budgets";
 import type { FinanceAccountItem, FinancePageData, FinanceTransactionItem } from "../server";
 
 const ACCOUNT_ICONS: Record<FinanceAccountItem["accountKind"], React.ReactNode> = {
@@ -754,10 +755,14 @@ export function FamilyFinanceView({
 
           <div className="grid gap-3 sm:grid-cols-2">
             {txKind !== "transfer" && (
-              <Input
+              <Select
                 label={t("finance.modal.categoryLabel")}
                 value={txCategory}
                 onChange={(e) => setTxCategory(e.target.value)}
+                options={buildFinanceCategoryOptions(t, [
+                  ...data.transactions.map((tx) => tx.category),
+                  txCategory,
+                ])}
               />
             )}
             <Input

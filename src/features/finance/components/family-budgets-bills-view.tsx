@@ -41,6 +41,7 @@ import {
   updateBudgetAction,
 } from "../budget-actions";
 import type { BudgetsBillsPageData } from "../budget-server";
+import { buildFinanceCategoryOptions } from "../budgets";
 import { formatNumericCurrency } from "../money";
 
 export function FamilyBudgetsBillsView({
@@ -604,7 +605,15 @@ export function FamilyBudgetsBillsView({
         <form onSubmit={handleCreateBudget} className="space-y-4">
           <Input label={t("budgets.modal.budgetName")} required placeholder={t("budgets.modal.budgetPlaceholder")} value={bName} onChange={(e) => setBName(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label={t("budgets.modal.category")} required value={bCategory} onChange={(e) => setBCategory(e.target.value)} />
+            <Select
+              label={t("budgets.modal.category")}
+              value={bCategory}
+              onChange={(e) => setBCategory(e.target.value)}
+              options={buildFinanceCategoryOptions(t, [
+                ...data.budgets.map((b) => b.category),
+                bCategory,
+              ])}
+            />
             <Input label={t("budgets.modal.limit")} required value={bLimit} onChange={(e) => setBLimit(e.target.value)} className="tabular-nums" />
             <Input label={t("budgets.modal.periodStart")} type="date" value={bStart} onChange={(e) => setBStart(e.target.value)} />
             <Input label={t("budgets.modal.periodEnd")} type="date" value={bEnd} onChange={(e) => setBEnd(e.target.value)} />

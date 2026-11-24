@@ -78,6 +78,43 @@ export function computeBudgetProgress(params: {
   };
 }
 
+export const FINANCE_CATEGORY_SPECS = [
+  { value: "Groceries", labelKey: "budgets.cat.groceries" },
+  { value: "Utilities", labelKey: "budgets.cat.utilities" },
+  { value: "Housing", labelKey: "budgets.cat.housing" },
+  { value: "Transport", labelKey: "budgets.cat.transport" },
+  { value: "Dining", labelKey: "budgets.cat.dining" },
+  { value: "Health", labelKey: "budgets.cat.health" },
+  { value: "Education", labelKey: "budgets.cat.education" },
+  { value: "Subscriptions", labelKey: "budgets.cat.subscriptions" },
+  { value: "Entertainment", labelKey: "budgets.cat.entertainment" },
+  { value: "Shopping", labelKey: "budgets.cat.shopping" },
+  { value: "Other", labelKey: "budgets.cat.other" },
+] as const;
+
+export type FinanceCategoryLabelKey = (typeof FINANCE_CATEGORY_SPECS)[number]["labelKey"];
+
+/**
+ * Builds localized category select options while preserving any custom existing categories.
+ */
+export function buildFinanceCategoryOptions(
+  translate: (key: FinanceCategoryLabelKey) => string,
+  existingCategories: string[] = []
+): Array<{ value: string; label: string }> {
+  const options: Array<{ value: string; label: string }> = FINANCE_CATEGORY_SPECS.map((spec) => ({
+    value: spec.value,
+    label: translate(spec.labelKey),
+  }));
+  const seen = new Set(options.map((o) => o.value.toLowerCase()));
+  for (const raw of existingCategories) {
+    const trimmed = raw.trim();
+    if (!trimmed || seen.has(trimmed.toLowerCase())) continue;
+    seen.add(trimmed.toLowerCase());
+    options.push({ value: trimmed, label: trimmed });
+  }
+  return options;
+}
+
 export type ComputedBillStatus = "paid" | "overdue" | "due_soon" | "upcoming";
 
 export function classifyBillStatus(params: {

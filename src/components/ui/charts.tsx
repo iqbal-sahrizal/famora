@@ -71,10 +71,16 @@ export function BudgetRing({
   spentCents,
   budgetCents,
   label,
+  currencyCode = "USD",
+  locale,
+  targetText,
 }: {
   spentCents: number;
   budgetCents: number;
   label: string;
+  currencyCode?: string;
+  locale?: string;
+  targetText?: string;
 }) {
   const pct = Math.min(100, Math.round((spentCents / Math.max(budgetCents, 1)) * 100));
   const radius = 38;
@@ -117,10 +123,10 @@ export function BudgetRing({
           {label}
         </p>
         <p className="mt-0.5 font-heading text-[20px] font-semibold tabular-nums text-[var(--text-primary)]">
-          {formatCurrency(spentCents)}
+          {formatCurrency(spentCents, currencyCode, locale)}
         </p>
         <p className="text-[12.5px] text-[var(--text-muted)] tabular-nums">
-          of {formatCurrency(budgetCents)} monthly target
+          {targetText ?? `of ${formatCurrency(budgetCents, currencyCode, locale)} monthly target`}
         </p>
       </div>
     </div>

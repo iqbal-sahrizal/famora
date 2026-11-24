@@ -640,6 +640,13 @@ export function FamilyDashboardView({
             spentCents={effectiveData.financeSummary.monthlySpentCents}
             budgetCents={effectiveData.financeSummary.monthlyBudgetCents}
             label={t("dashboard.monthlyBudget")}
+            currencyCode={effectiveData.financeSummary.currencyCode}
+            targetText={t("dashboard.monthlyTargetOf", {
+              amount: formatCurrency(
+                effectiveData.financeSummary.monthlyBudgetCents,
+                effectiveData.financeSummary.currencyCode
+              ),
+            })}
           />
         )}
       </div>
