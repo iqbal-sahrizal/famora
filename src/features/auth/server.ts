@@ -66,7 +66,7 @@ export async function ensureProfileInitialized(user: User): Promise<ProfileRow |
     const fallbackName =
       (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
       user.email?.split("@")[0] ||
-      "Famora Member";
+      "Senvamily Member";
 
     const { data: created } = await supabase
       .from("profiles")

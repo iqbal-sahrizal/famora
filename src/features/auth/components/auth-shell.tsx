@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ShieldCheck, Sparkles, Users } from "lucide-react";
-import { FamoraLogo } from "@/components/ui/brand-logo";
+import { SenvamilyLogo } from "@/components/ui/brand-logo";
 import { ThemeToggle } from "@/components/ui/navigation";
 import { routes } from "@/lib/routes";
 import { useLocale } from "@/providers/locale-provider";
@@ -26,7 +26,7 @@ export function AuthShell({
       <aside className="relative hidden flex-col justify-between overflow-hidden bg-[var(--tint-sage)] p-12 text-[var(--tint-sage-fg)] lg:flex">
         <div className="flex items-center justify-between">
           <Link href={routes.home} className="inline-flex items-center">
-            <FamoraLogo size="md" />
+            <SenvamilyLogo size="md" />
           </Link>
         </div>
 
@@ -100,7 +100,7 @@ export function AuthShell({
       <div className="flex min-h-dvh flex-col justify-between px-4 py-6 sm:px-12 sm:py-8">
         <div className="flex items-center justify-between gap-2">
           <Link href={routes.home} className="flex min-h-11 items-center lg:hidden">
-            <FamoraLogo size="sm" />
+            <SenvamilyLogo size="sm" />
           </Link>
           <div className="ml-auto flex items-center gap-2">
             <button

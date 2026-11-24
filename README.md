@@ -1,6 +1,6 @@
-# Famora — Development Guide
+# Senvamily — Development Guide
 
-**Famora** is a premium, privacy-first multi-family management platform built with Next.js App Router, TypeScript (strict), Tailwind CSS v4, shadcn/ui conventions, TanStack Query, React Hook Form, Zod, and Zustand.
+**Senvamily** (*Your Family, Your World.*) is a connected family management platform built with Next.js App Router, TypeScript (strict), Tailwind CSS v4, shadcn/ui conventions, TanStack Query, React Hook Form, Zod, and Zustand.
 
 ## Architecture & Documentation
 
@@ -41,6 +41,6 @@ npm run start       # Start production server
 
 ## Key Routes
 
-- `/` & `/design-system` — Famora Design System Showcase
+- `/` — Senvamily Landing & Workspace Entry
 - `/f/[familyId]` — Scoped Family Workspace Shell (supports all 19 domains)
 - `/api/health` — Service health endpoint

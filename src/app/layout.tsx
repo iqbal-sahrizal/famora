@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import { siteConfig } from "@/config/site";
+import { PRODUCTION_APP_URL } from "@/lib/env";
 import { LOCALE_COOKIE_NAME, normalizeLocale } from "@/lib/i18n";
 import { AppProviders } from "@/providers/app-providers";
 import "./globals.css";
@@ -20,11 +21,28 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(PRODUCTION_APP_URL),
+  applicationName: siteConfig.name,
   title: {
     default: `${siteConfig.name} — ${siteConfig.tagline}`,
     template: `%s · ${siteConfig.name}`,
   },
   description: siteConfig.description,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    siteName: siteConfig.name,
+    title: `${siteConfig.name} — ${siteConfig.tagline}`,
+    description: siteConfig.description,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${siteConfig.name} — ${siteConfig.tagline}`,
+    description: siteConfig.description,
+  },
   icons: {
     icon: [
       { url: "/icons/icon-192.svg", type: "image/svg+xml" },

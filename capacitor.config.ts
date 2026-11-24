@@ -5,7 +5,7 @@ const serverUrl =
 
 const config: CapacitorConfig = {
   appId: "app.famora.family",
-  appName: "Famora",
+  appName: "Senvamily",
   webDir: "capacitor-web",
   server: {
     url: serverUrl,

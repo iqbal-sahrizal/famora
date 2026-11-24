@@ -229,7 +229,7 @@ export async function generateAiAssistantResponse(params: {
             {
               role: "system",
               content:
-                `You are Famora AI, a warm, concise family assistant. Answer using ONLY the authorized JSON context provided. Never invent numbers or expose restricted data. Reply in the same language as the user (Indonesian or English).\n\nAuthorized Context:\n${JSON.stringify(sanitizedContext)}`,
+                `You are Senvamily AI, a warm, concise family assistant. Answer using ONLY the authorized JSON context provided. Never invent numbers or expose restricted data. Reply in the same language as the user (Indonesian or English).\n\nAuthorized Context:\n${JSON.stringify(sanitizedContext)}`,
             },
             ...priorMessages,
             {

@@ -129,7 +129,7 @@ public class MainActivity extends BridgeActivity {
         int iconSizePx = Math.round(288 * getResources().getDisplayMetrics().density);
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.splash_icon);
-        logo.setContentDescription("Famora");
+        logo.setContentDescription("Senvamily");
         FrameLayout.LayoutParams logoParams = new FrameLayout.LayoutParams(
             iconSizePx,
             iconSizePx,

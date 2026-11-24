@@ -8,9 +8,9 @@ const SIZE_CLASSES = {
 } as const;
 
 /**
- * Single source of truth for the Famora brand mark across web, auth, and splash UI.
+ * Single source of truth for the Senvamily brand mark across web, auth, and splash UI.
  */
-export function FamoraLogo({
+export function SenvamilyLogo({
   size = "md",
   showWordmark = true,
   className,
@@ -37,7 +37,7 @@ export function FamoraLogo({
             s.text
           )}
         >
-          Famora
+          Senvamily
         </span>
       )}
     </div>

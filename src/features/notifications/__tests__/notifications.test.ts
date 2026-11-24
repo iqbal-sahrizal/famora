@@ -118,7 +118,7 @@ describe("Notification System — Push Subscriptions, Quiet Hours, Preferences &
       deepLink: "/f/fam-1/budgets",
     });
     expect(billPush.title).toBe("Household Bill Reminder");
-    expect(billPush.body).toBe("Open Famora to view details.");
+    expect(billPush.body).toBe("Open Senvamily to view details.");
     expect(billPush.title).not.toContain("240.50");
 
     const chatPush = sanitizePushPayload({

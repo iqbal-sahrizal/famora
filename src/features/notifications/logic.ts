@@ -119,7 +119,7 @@ export function sanitizePushPayload(params: {
 
   return {
     title: hasSensitiveHint ? safeTitle : params.title.slice(0, 80) || safeTitle,
-    body: "Open Famora to view details.",
+    body: "Open Senvamily to view details.",
     url: safeDeepLink,
   };
 }

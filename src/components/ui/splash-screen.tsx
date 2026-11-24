@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { FamoraLogo } from "./brand-logo";
+import { SenvamilyLogo } from "./brand-logo";
 import { Button } from "./button";
 import { routes } from "@/lib/routes";
 
 /**
- * Branded Famora splash / bootstrap screen shown while session or workspace data loads.
+ * Branded Senvamily splash / bootstrap screen shown while session or workspace data loads.
  */
-export function FamoraSplashScreen({
-  label = "Famora",
+export function SenvamilySplashScreen({
+  label = "Senvamily",
   error,
   onRetry,
 }: {
@@ -25,7 +25,7 @@ export function FamoraSplashScreen({
     >
       <div className="flex flex-col items-center gap-5">
         <div className="motion-safe:transition-transform motion-safe:duration-300">
-          <FamoraLogo size="lg" showWordmark={false} />
+          <SenvamilyLogo size="lg" showWordmark={false} />
         </div>
         <div className="space-y-1.5">
           <p className="font-heading text-[22px] font-bold tracking-tight text-[var(--text-primary)]">

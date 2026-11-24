@@ -1,5 +1,5 @@
-import { FamoraSplashScreen } from "@/components/ui/splash-screen";
+import { SenvamilySplashScreen } from "@/components/ui/splash-screen";
 
-export default function Loading() {
-  return <FamoraSplashScreen />;
+export default function RootLoading() {
+  return <SenvamilySplashScreen />;
 }

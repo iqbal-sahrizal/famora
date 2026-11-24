@@ -61,7 +61,7 @@ export default async function HomePage() {
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">
               <HeartHandshake className="h-5 w-5" strokeWidth={1.75} />
             </div>
-            <span className="font-heading text-[18px] font-bold">Famora</span>
+            <span className="font-heading text-[18px] font-bold">Senvamily</span>
           </Link>
 
           <div className="flex items-center gap-1.5 sm:gap-2.5">
@@ -154,7 +154,7 @@ export default async function HomePage() {
             </span>
           </div>
           <span className="font-medium text-[var(--text-secondary)]">
-            Famora
+            Senvamily · Your Family, Your World.
           </span>
         </footer>
       </main>

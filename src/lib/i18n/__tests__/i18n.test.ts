@@ -232,7 +232,7 @@ describe("AUD-010 Complete Localization & Language Persistence", () => {
         const propMatch = line.match(
           /\b(title|description|label|actionLabel|placeholder)="([A-Z][^"{}]+)"/
         );
-        if (propMatch && propMatch[2] !== "Famora") {
+        if (propMatch && propMatch[2] !== "Senvamily") {
           violations.push(
             `${rel}:${idx + 1}: hardcoded UI prop ${propMatch[1]}="${propMatch[2]}"`
           );

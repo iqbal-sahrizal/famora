@@ -1,6 +1,9 @@
 export const siteConfig = {
-  name: "Famora",
-  tagline: "Premium Family Management Platform",
+  name: process.env.NEXT_PUBLIC_APP_NAME || "Senvamily",
+  tagline: "Your Family, Your World.",
   description:
-    "Warm, privacy-first multi-family management platform for daily coordination, finances, safety, and memories.",
+    "Senvamily is your connected family space to organize everyday life, manage family activities, and grow together.",
+  shortDescription:
+    "A connected space to organize, manage, and grow together as a family.",
+  emailSenderName: process.env.EMAIL_SENDER_NAME || "Senvamily",
 } as const;

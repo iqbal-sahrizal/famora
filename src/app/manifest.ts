@@ -2,10 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Famora — Family Workspace",
-    short_name: "Famora",
+    name: "Senvamily — Your Family, Your World.",
+    short_name: "Senvamily",
     description:
-      "Warm, privacy-first family management for daily coordination, finances, safety, and memories.",
+      "A connected space to organize, manage, and grow together as a family.",
     start_url: "/",
     scope: "/",
     display: "standalone",

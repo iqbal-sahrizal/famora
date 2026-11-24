@@ -132,7 +132,7 @@ export function FamilyAnalyticsView({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `famora-finance-report-${win.start}-to-${win.end}.csv`;
+    a.download = `senvamily-finance-report-${win.start}-to-${win.end}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(t("analytics.csvExportedToast"));

@@ -1,6 +1,6 @@
-const CACHE_VERSION = "v3";
-const SHELL_CACHE = `famora-shell-${CACHE_VERSION}`;
-const STATIC_CACHE = `famora-static-${CACHE_VERSION}`;
+const CACHE_VERSION = "v4";
+const SHELL_CACHE = `senvamily-shell-${CACHE_VERSION}`;
+const STATIC_CACHE = `senvamily-static-${CACHE_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
 const PRECACHE_ASSETS = [
@@ -114,11 +114,11 @@ self.addEventListener("fetch", (event) => {
 // Web Push Listeners (Step 25)
 self.addEventListener("push", (event) => {
   if (!event.data) return;
-  let payload = { title: "Famora", body: "You have a new family update.", url: "/" };
+  let payload = { title: "Senvamily", body: "You have a new family update.", url: "/" };
   try {
     const parsed = event.data.json();
     payload = {
-      title: parsed.title || "Famora",
+      title: parsed.title || "Senvamily",
       body: parsed.body || "You have a new family update.",
       url: parsed.url || "/",
     };

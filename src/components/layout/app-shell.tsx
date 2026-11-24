@@ -133,7 +133,7 @@ export function AppShell({
             {!sidebarCollapsed && (
               <div className="truncate">
                 <p className="font-heading text-[16px] font-bold leading-tight">
-                  Famora
+                  Senvamily
                 </p>
                 <p className="truncate text-[11.5px] text-[var(--text-muted)]">
                   {familyLabel}
@@ -267,7 +267,7 @@ export function AppShell({
               className="flex min-h-11 shrink-0 items-center gap-2 lg:hidden"
             >
               <HeartHandshake className="h-5 w-5 text-[var(--accent-primary)]" />
-              <span className="font-heading text-[16px] font-bold">Famora</span>
+              <span className="font-heading text-[16px] font-bold">Senvamily</span>
             </Link>
             {families.length > 1 ? (
               <select

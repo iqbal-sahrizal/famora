@@ -216,7 +216,7 @@ export function FamilyAiView({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-[var(--accent-primary)]" />
-            <h1 className="font-heading text-[16px] font-bold">Famora AI</h1>
+            <h1 className="font-heading text-[16px] font-bold">Senvamily AI</h1>
           </div>
           <Button
             type="button"
