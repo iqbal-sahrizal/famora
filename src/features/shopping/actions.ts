@@ -321,20 +321,34 @@ export async function toggleShoppingCheckAction(
       // Sync purchased shopping item with price into Finance expenses (idempotent per itemId)
       if (Number(item.estimated_price_cents) > 0) {
         try {
-          const { data: account } = await supabase
-            .from("finance_accounts")
-            .select("id")
-            .eq("family_id", parsed.data.familyId)
-            .eq("is_archived", false)
-            .order("created_at", { ascending: true })
-            .limit(1)
-            .maybeSingle<{ id: string }>();
+          let accountId: string | null = null;
+          if (parsed.data.financeAccountId) {
+            const { data: chosen } = await supabase
+              .from("finance_accounts")
+              .select("id")
+              .eq("id", parsed.data.financeAccountId)
+              .eq("family_id", parsed.data.familyId)
+              .eq("is_archived", false)
+              .maybeSingle<{ id: string }>();
+            accountId = chosen?.id ?? null;
+          }
+          if (!accountId) {
+            const { data: account } = await supabase
+              .from("finance_accounts")
+              .select("id")
+              .eq("family_id", parsed.data.familyId)
+              .eq("is_archived", false)
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle<{ id: string }>();
+            accountId = account?.id ?? null;
+          }
 
-          if (account?.id) {
+          if (accountId) {
             const amount = Number((Number(item.estimated_price_cents) / 100).toFixed(2));
             await supabase.rpc("record_finance_transaction", {
               p_family_id: parsed.data.familyId,
-              p_account_id: account.id,
+              p_account_id: accountId,
               p_kind: "expense",
               p_amount: amount,
               p_merchant: item.name,

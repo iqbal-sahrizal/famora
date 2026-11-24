@@ -5,6 +5,7 @@ export interface ShoppingPageData {
   currencyCode: string;
   canManage: boolean;
   members: Array<{ id: string; displayName: string }>;
+  financeAccounts: Array<{ id: string; name: string }>;
   lists: Array<{
     id: string;
     name: string;
@@ -46,6 +47,7 @@ export async function getShoppingPageData(familyId: string): Promise<ShoppingPag
     currencyCode: "USD",
     canManage: false,
     members: [],
+    financeAccounts: [],
     lists: [],
     items: [],
     templates: [],
@@ -62,6 +64,7 @@ export async function getShoppingPageData(familyId: string): Promise<ShoppingPag
       { data: itemsData },
       { data: templatesData },
       { data: historyData },
+      { data: financeAccountsData },
     ] = await Promise.all([
       supabase.from("families").select("currency_code").eq("id", familyId).maybeSingle(),
       supabase.rpc("get_my_family_permissions", { p_family_id: familyId }),
@@ -95,6 +98,12 @@ export async function getShoppingPageData(familyId: string): Promise<ShoppingPag
         .eq("family_id", familyId)
         .order("purchase_count", { ascending: false })
         .limit(12),
+      supabase
+        .from("finance_accounts")
+        .select("id, name")
+        .eq("family_id", familyId)
+        .eq("is_archived", false)
+        .order("created_at", { ascending: true }),
     ]);
 
     const permSet = new Set(
@@ -112,6 +121,9 @@ export async function getShoppingPageData(familyId: string): Promise<ShoppingPag
       currencyCode: fam?.currency_code ?? "USD",
       canManage: permSet.has("shopping.manage"),
       members,
+      financeAccounts: ((financeAccountsData ?? []) as Array<{ id: string; name: string }>).map(
+        (a) => ({ id: a.id, name: a.name })
+      ),
       lists: (listsData ?? []).map((l) => ({
         id: l.id,
         name: l.name,

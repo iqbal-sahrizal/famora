@@ -37,6 +37,7 @@ export const toggleShoppingCheckSchema = z.object({
   familyId: z.string().uuid(),
   itemId: z.string().uuid(),
   isChecked: z.boolean(),
+  financeAccountId: z.string().uuid().nullable().optional(),
 });
 
 export const updateShoppingQuantitySchema = z.object({

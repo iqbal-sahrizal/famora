@@ -85,6 +85,21 @@ export function FamilyShoppingView({
   const [quickQty, setQuickQty] = React.useState("1");
   const [quickPrice, setQuickPrice] = React.useState("");
   const [quickShopper, setQuickShopper] = React.useState("");
+  const financeAccounts = React.useMemo(
+    () => effectiveData.financeAccounts ?? [],
+    [effectiveData.financeAccounts]
+  );
+  const [selectedFinanceAccountId, setSelectedFinanceAccountId] = React.useState(
+    () => financeAccounts[0]?.id ?? ""
+  );
+  React.useEffect(() => {
+    if (
+      financeAccounts.length > 0 &&
+      !financeAccounts.some((a) => a.id === selectedFinanceAccountId)
+    ) {
+      setSelectedFinanceAccountId(financeAccounts[0].id);
+    }
+  }, [financeAccounts, selectedFinanceAccountId]);
   const currencyPrefix = getCurrencyPrefix(effectiveData.currencyCode);
   const [busy, setBusy] = React.useState(false);
 
@@ -264,6 +279,7 @@ export function FamilyShoppingView({
       familyId,
       itemId,
       isChecked: !current,
+      financeAccountId: selectedFinanceAccountId || null,
     });
     if (!res.ok) {
       setItemsState(previous);
@@ -437,6 +453,33 @@ export function FamilyShoppingView({
     router.refresh();
   };
 
+  const shoppingCategoryOptions = React.useMemo(() => {
+    const base = [
+      { value: "Groceries", label: t("shopping.cat.groceries") },
+      { value: "Produce", label: t("shopping.cat.produce") },
+      { value: "Dairy", label: t("shopping.cat.dairy") },
+      { value: "Household", label: t("shopping.cat.household") },
+      { value: "Pharmacy", label: t("shopping.cat.pharmacy") },
+    ];
+    if (
+      editItemCategory.trim() &&
+      !base.some((o) => o.value.toLowerCase() === editItemCategory.trim().toLowerCase())
+    ) {
+      base.push({ value: editItemCategory.trim(), label: editItemCategory.trim() });
+    }
+    return base;
+  }, [editItemCategory, t]);
+
+  const formatShoppingCat = (cat: string) => {
+    const found = shoppingCategoryOptions.find(
+      (o) => o.value.toLowerCase() === cat.trim().toLowerCase()
+    );
+    return found ? found.label : cat;
+  };
+
+  const selectedFinanceAccountName =
+    financeAccounts.find((a) => a.id === selectedFinanceAccountId)?.name ?? "";
+
   return (
     <Section>
       <OfflineCacheBanner
@@ -563,66 +606,99 @@ export function FamilyShoppingView({
         </div>
       )}
 
-      {/* Fast Inline Add Bar */}
+      {/* Add Shopping Item Form */}
       {data.canManage && (
-        <Card className="p-4">
-          <form
-            onSubmit={handleQuickAdd}
-            className="grid gap-3 sm:grid-cols-[1.4fr_0.5fr_0.8fr_0.8fr_0.8fr_auto] sm:items-end"
-          >
-            <Input
-              placeholder={t("shopping.quickAddPlaceholder")}
-              value={quickName}
-              onChange={(e) => setQuickName(e.target.value)}
-            />
-            <Input
-              aria-label={t("shopping.qtyAria")}
-              placeholder={t("shopping.qtyPlaceholder")}
-              value={quickQty}
-              onChange={(e) => setQuickQty(e.target.value)}
-            />
-            <Input
-              aria-label={t("shopping.priceOptionalLabel")}
-              type="text"
-              inputMode="decimal"
-              placeholder="0"
-              leadingIcon={
-                <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
-                  {currencyPrefix}
-                </span>
-              }
-              value={quickPrice}
-              onChange={(e) => setQuickPrice(sanitizeNumericCurrencyInput(e.target.value))}
-              className="tabular-nums"
-            />
-            <Select
-              aria-label={t("shopping.categoryAria")}
-              value={quickCategory}
-              onChange={(e) => setQuickCategory(e.target.value)}
-              options={[
-                { value: "Groceries", label: t("shopping.cat.groceries") },
-                { value: "Produce", label: t("shopping.cat.produce") },
-                { value: "Dairy", label: t("shopping.cat.dairy") },
-                { value: "Household", label: t("shopping.cat.household") },
-                { value: "Pharmacy", label: t("shopping.cat.pharmacy") },
-              ]}
-            />
-            <Select
-              aria-label={t("shopping.assigneeAria")}
-              value={quickShopper}
-              onChange={(e) => setQuickShopper(e.target.value)}
-              options={[
-                { value: "", label: t("shopping.anyShopper") },
-                ...data.members.map((m) => ({
-                  value: m.id,
-                  label: m.displayName,
-                })),
-              ]}
-            />
-            <Button type="submit" isLoading={busy}>
-              <Plus className="h-4 w-4" />
-              {t("common.add")}
-            </Button>
+        <Card className="p-4 sm:p-5">
+          <form onSubmit={handleQuickAdd} className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-heading text-[15px] font-semibold">
+                {t("shopping.addItemTitle")}
+              </h2>
+              {selectedFinanceAccountName ? (
+                <p className="text-[12px] text-[var(--text-secondary)]">
+                  {t("shopping.financeAccountHint", { account: selectedFinanceAccountName })}
+                </p>
+              ) : (
+                <p className="text-[12px] text-[var(--text-muted)]">
+                  {t("shopping.noFinanceAccountHint")}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label={t("shopping.itemNameLabel")}
+                required
+                placeholder={t("shopping.quickAddPlaceholder")}
+                value={quickName}
+                onChange={(e) => setQuickName(e.target.value)}
+              />
+              <Select
+                label={t("shopping.categoryLabel")}
+                aria-label={t("shopping.categoryAria")}
+                value={quickCategory}
+                onChange={(e) => setQuickCategory(e.target.value)}
+                options={shoppingCategoryOptions}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Input
+                label={t("shopping.qtyAria")}
+                aria-label={t("shopping.qtyAria")}
+                placeholder={t("shopping.qtyPlaceholder")}
+                value={quickQty}
+                onChange={(e) => setQuickQty(e.target.value)}
+              />
+              <Input
+                label={t("shopping.priceOptionalLabel")}
+                aria-label={t("shopping.priceOptionalLabel")}
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
+                leadingIcon={
+                  <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
+                    {currencyPrefix}
+                  </span>
+                }
+                value={quickPrice}
+                onChange={(e) => setQuickPrice(sanitizeNumericCurrencyInput(e.target.value))}
+                className="tabular-nums"
+              />
+              <Select
+                label={t("shopping.assigneeAria")}
+                aria-label={t("shopping.assigneeAria")}
+                value={quickShopper}
+                onChange={(e) => setQuickShopper(e.target.value)}
+                options={[
+                  { value: "", label: t("shopping.anyShopper") },
+                  ...data.members.map((m) => ({
+                    value: m.id,
+                    label: m.displayName,
+                  })),
+                ]}
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              {financeAccounts.length > 0 && (
+                <div className="sm:min-w-[260px] sm:flex-1">
+                  <Select
+                    label={t("shopping.financeAccountLabel")}
+                    value={selectedFinanceAccountId}
+                    onChange={(e) => setSelectedFinanceAccountId(e.target.value)}
+                    options={financeAccounts.map((a) => ({
+                      value: a.id,
+                      label: a.name,
+                    }))}
+                  />
+                </div>
+              )}
+              <Button type="submit" isLoading={busy} className="sm:shrink-0">
+                <Plus className="h-4 w-4" />
+                {t("common.add")}
+              </Button>
+            </div>
           </form>
         </Card>
       )}
@@ -671,7 +747,7 @@ export function FamilyShoppingView({
                       {item.name}
                     </p>
                     <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-[var(--text-secondary)]">
-                      <Badge variant="neutral">{item.category}</Badge>
+                      <Badge variant="neutral">{formatShoppingCat(item.category)}</Badge>
                       {item.estimatedPriceCents > 0 && (
                         <span className="tabular-nums font-medium">
                           {formatCurrency(item.estimatedPriceCents, data.currencyCode, toIntlLocale(locale))}
@@ -961,10 +1037,11 @@ export function FamilyShoppingView({
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input
+            <Select
               label={t("shopping.categoryLabel")}
               value={editItemCategory}
               onChange={(e) => setEditItemCategory(e.target.value)}
+              options={shoppingCategoryOptions}
             />
             <Input
               label={t("shopping.priceOptionalLabel")}
