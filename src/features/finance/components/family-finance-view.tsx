@@ -41,7 +41,11 @@ import {
   reverseFinanceTransactionAction,
   updateFinanceAccountAction,
 } from "../actions";
-import { formatNumericCurrency, parseDecimalToMinorUnits } from "../money";
+import {
+  formatNumericCurrency,
+  minorUnitsToDecimalString,
+  parseDecimalToMinorUnits,
+} from "../money";
 import type { FinanceAccountItem, FinancePageData, FinanceTransactionItem } from "../server";
 
 const ACCOUNT_ICONS: Record<FinanceAccountItem["accountKind"], React.ReactNode> = {
@@ -116,6 +120,18 @@ export function FamilyFinanceView({
   );
   const [txAttachment, setTxAttachment] = React.useState("");
   const [selectedTx, setSelectedTx] = React.useState<FinanceTransactionItem | null>(null);
+  const [selectedAccountExpenses, setSelectedAccountExpenses] =
+    React.useState<FinanceAccountItem | null>(null);
+
+  const expenseByAccountId = React.useMemo(() => {
+    const map = new Map<string, bigint>();
+    for (const tx of data.transactions) {
+      if (tx.isReversed || tx.kind !== "expense") continue;
+      const amt = parseDecimalToMinorUnits(tx.amountNumeric);
+      map.set(tx.accountId, (map.get(tx.accountId) ?? 0n) + amt);
+    }
+    return map;
+  }, [data.transactions]);
 
   React.useEffect(() => {
     if (!activeAccounts.some((a) => a.id === txAccountId)) {
@@ -353,56 +369,73 @@ export function FamilyFinanceView({
             </p>
           ) : (
             <div className="space-y-2.5">
-              {activeAccounts.map((acc) => (
-                <div
-                  key={acc.id}
-                  className="flex items-center justify-between gap-2 rounded-2xl bg-[var(--bg-subtle)] px-4 py-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-surface)] text-[var(--accent-primary)]">
-                      {ACCOUNT_ICONS[acc.accountKind]}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-[14px] font-semibold">{acc.name}</p>
-                      <p className="text-[11.5px] text-[var(--text-muted)]">
-                        {acc.accountKind} · {acc.ownershipScope}
-                      </p>
+              {activeAccounts.map((acc) => {
+                const accountExpenseMinor = expenseByAccountId.get(acc.id) ?? 0n;
+                const accountExpenseNumeric = minorUnitsToDecimalString(accountExpenseMinor);
+                return (
+                  <div
+                    key={acc.id}
+                    className="flex items-center justify-between gap-2 rounded-2xl bg-[var(--bg-subtle)] px-4 py-3 transition-colors hover:bg-[var(--bg-hover)]"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountFilter(acc.id);
+                        setKindFilter("expense");
+                        setTab("overview");
+                        setSelectedAccountExpenses(acc);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-surface)] text-[var(--accent-primary)]">
+                        {ACCOUNT_ICONS[acc.accountKind]}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[14px] font-semibold">{acc.name}</p>
+                        <p className="text-[11.5px] text-[var(--text-muted)]">
+                          {acc.accountKind} · {acc.ownershipScope}
+                        </p>
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountFilter(acc.id);
+                          setKindFilter("expense");
+                          setTab("overview");
+                          setSelectedAccountExpenses(acc);
+                        }}
+                        className="font-heading text-[15.5px] font-bold tabular-nums mr-1 text-[var(--status-danger-fg)] cursor-pointer"
+                      >
+                        -{formatNumericCurrency(accountExpenseNumeric, acc.currencyCode, intlLocale)}
+                      </button>
+                      {data.canManageAccounts && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`${t("common.edit")} ${acc.name}`}
+                            onClick={() => openEditAccount(acc)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Archive ${acc.name}`}
+                            onClick={() => setArchiveTarget(acc)}
+                          >
+                            <Archive className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span
-                      className={cn(
-                        "font-heading text-[15.5px] font-bold tabular-nums mr-1",
-                        acc.balanceNumeric.startsWith("-") && "text-[var(--accent-danger)]"
-                      )}
-                    >
-                      {formatNumericCurrency(acc.balanceNumeric, acc.currencyCode, intlLocale)}
-                    </span>
-                    {data.canManageAccounts && (
-                      <>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`${t("common.edit")} ${acc.name}`}
-                          onClick={() => openEditAccount(acc)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Archive ${acc.name}`}
-                          onClick={() => setArchiveTarget(acc)}
-                        >
-                          <Archive className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -913,6 +946,52 @@ export function FamilyFinanceView({
             )}
           </div>
         )}
+      </BottomSheet>
+
+      <BottomSheet
+        open={Boolean(selectedAccountExpenses)}
+        onClose={() => setSelectedAccountExpenses(null)}
+        title={
+          selectedAccountExpenses
+            ? t("finance.accountExpensesTitle", { name: selectedAccountExpenses.name })
+            : ""
+        }
+      >
+        {selectedAccountExpenses && (() => {
+          const accountExpenses = data.transactions.filter(
+            (tx) =>
+              tx.accountId === selectedAccountExpenses.id &&
+              tx.kind === "expense" &&
+              !tx.isReversed
+          );
+          if (accountExpenses.length === 0) {
+            return (
+              <p className="py-4 text-[13.5px] text-[var(--text-secondary)]">
+                {t("finance.accountExpensesEmpty")}
+              </p>
+            );
+          }
+          return (
+            <div className="max-h-[60vh] space-y-2.5 overflow-y-auto pr-1">
+              {accountExpenses.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--bg-subtle)] px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-semibold">{tx.merchant}</p>
+                    <p className="text-[12px] text-[var(--text-secondary)]">
+                      {tx.category} · {formatLocalizedDate(tx.occurredOn, locale)}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-heading text-[14.5px] font-bold tabular-nums text-[var(--status-danger-fg)]">
+                    -{formatNumericCurrency(tx.amountNumeric, selectedAccountExpenses.currencyCode, intlLocale)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </BottomSheet>
     </Section>
   );
