@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { HeartHandshake, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { ShieldCheck, Sparkles, Users } from "lucide-react";
+import { FamoraLogo } from "@/components/ui/brand-logo";
 import { ThemeToggle } from "@/components/ui/navigation";
 import { routes } from "@/lib/routes";
 import { useLocale } from "@/providers/locale-provider";
@@ -24,13 +25,8 @@ export function AuthShell({
       {/* Left Visual Story Panel (Desktop) */}
       <aside className="relative hidden flex-col justify-between overflow-hidden bg-[var(--tint-sage)] p-12 text-[var(--tint-sage-fg)] lg:flex">
         <div className="flex items-center justify-between">
-          <Link href={routes.home} className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">
-              <HeartHandshake className="h-5 w-5" strokeWidth={1.75} />
-            </div>
-            <span className="font-heading text-[19px] font-bold tracking-tight">
-              Famora
-            </span>
+          <Link href={routes.home} className="inline-flex items-center">
+            <FamoraLogo size="md" />
           </Link>
         </div>
 
@@ -103,11 +99,8 @@ export function AuthShell({
       {/* Right Form Panel */}
       <div className="flex min-h-dvh flex-col justify-between px-4 py-6 sm:px-12 sm:py-8">
         <div className="flex items-center justify-between gap-2">
-          <Link href={routes.home} className="flex min-h-11 items-center gap-2.5 lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">
-              <HeartHandshake className="h-5 w-5" />
-            </div>
-            <span className="font-heading text-[17px] font-bold">Famora</span>
+          <Link href={routes.home} className="flex min-h-11 items-center lg:hidden">
+            <FamoraLogo size="sm" />
           </Link>
           <div className="ml-auto flex items-center gap-2">
             <button

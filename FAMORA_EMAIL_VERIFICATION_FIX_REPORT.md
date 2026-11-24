@@ -53,7 +53,29 @@
 
 ---
 
-## 5. Remaining Manual Steps for User
+## 5. Branding Consistency, App Icons & Splash Screen
+
+### Logo Consistency
+- Audited all brand surfaces (`page.tsx`, `auth-shell.tsx`, `app-shell.tsx`, `public/icons/*`, `manifest.ts`, `layout.tsx`, and `android/app/src/main/res/*`).
+- Identified mismatch: website UI used Lucide `HeartHandshake` on `#315C49` (`--accent-primary`) with `#F7F5EF` (`--accent-primary-fg`), whereas `public/icons/icon-192.svg` and generated PNG/Android icons previously used a solid filled heart on `#2F6B4E`.
+- Created [brand-logo.tsx](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/src/components/ui/brand-logo.tsx) (`FamoraLogo`) as the single source of truth and wired it into `auth-shell.tsx` and the splash screen.
+
+### App Icon Assets Updated
+Regenerated all icons directly from the exact `HeartHandshake` vector paths on `#315C49` / `#F7F5EF`:
+- **Favicon & Web SVG:** [src/app/icon.svg](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/src/app/icon.svg), [public/icons/icon-192.svg](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/public/icons/icon-192.svg), [public/icons/icon-512.svg](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/public/icons/icon-512.svg), referenced in [src/app/layout.tsx](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/src/app/layout.tsx).
+- **PWA & Apple Icons:** `public/icons/icon-192.png` (192x192), `public/icons/icon-512.png` (512x512), `public/icons/icon-maskable-512.png` (512x512 full-bleed `#315C49` with safe-area padding), `public/icons/apple-touch-icon.png` (180x180 full-bleed `#315C49`), served by [src/app/manifest.ts](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/src/app/manifest.ts) (`theme_color: "#315C49"`, `background_color: "#F7F5EF"`).
+- **Android Launcher & Adaptive Icons:** Updated `ic_launcher.png`, `ic_launcher_round.png`, and `ic_launcher_foreground.png` across `mipmap-mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, and `xxxhdpi`.
+
+### Splash Implementation
+- **Web & PWA Splash/Loading:** Created [splash-screen.tsx](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/src/components/ui/splash-screen.tsx) (`FamoraSplashScreen`) and wired it to [src/app/loading.tsx](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/src/app/loading.tsx) and [src/app/(app)/f/[familyId]/loading.tsx](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/src/app/(app)/f/[familyId]/loading.tsx) with centered `FamoraLogo`, warm `#F7F5EF` / `#161917` canvas, `prefers-reduced-motion` support, and retry/login error fallback.
+- **Android Native Splash:** Regenerated `splash.png` across `drawable` and all `drawable-port-*` / `drawable-land-*` densities with the centered `#315C49` `HeartHandshake` badge on `#F7F5EF`.
+
+### Visual & Verification Status
+- `npm run typecheck`, `npm run lint`, `npm test -- --run` (**39 files, 177 tests**), `npm run build`, and signed `app-release.apk` (`2.9M`) all **PASS**.
+
+---
+
+## 6. Remaining Manual Steps for User
 
 1. **Re-install updated [app-release.apk](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/android/app/build/outputs/apk/release/app-release.apk)** on your Android phone (it now includes the Android App Links `<intent-filter android:autoVerify="true">`).
 2. **Test a real signup** from the Famora mobile app (or mobile browser) at `https://famora-eight.vercel.app/signup`, confirm the verification email link points to `https://famora-eight.vercel.app/...` (no `localhost:3000`), tap **Verify Email**, and verify the redirect back to Famora.
