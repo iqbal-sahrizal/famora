@@ -254,14 +254,6 @@ export function AppShell({
               </button>
             </div>
           </div>
-          {!sidebarCollapsed && (
-            <Link
-              href={routes.designSystem}
-              className="block px-2 text-[11.5px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            >
-              {t("shell.designSystem")}
-            </Link>
-          )}
         </div>
       </aside>
 

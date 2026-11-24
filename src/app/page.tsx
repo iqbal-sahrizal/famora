@@ -153,12 +153,9 @@ export default async function HomePage() {
               Realtime &amp; Offline PWA
             </span>
           </div>
-          <Link
-            href={routes.designSystem}
-            className="font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-          >
-            View Design System →
-          </Link>
+          <span className="font-medium text-[var(--text-secondary)]">
+            Famora · Private Family Workspace
+          </span>
         </footer>
       </main>
     </div>
