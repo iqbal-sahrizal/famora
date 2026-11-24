@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { registerFcmTokenWithBackend } from "@/components/notifications/push-initializer";
+import { getInstalledAndroidVersion } from "@/lib/app-update/native-updater";
 import { PageHeader, Section } from "@/components/layout/primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -187,6 +188,11 @@ export function FamilyNotificationsView({
     if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
       setSubscribingPush(true);
       try {
+        const versionInfo = await getInstalledAndroidVersion();
+        if (versionInfo?.fcmConfigured !== true) {
+          toast.error(t("notifications.toast.pushUnsupported"));
+          return;
+        }
         const perm = await PushNotifications.requestPermissions();
         if (perm.receive !== "granted") {
           toast.error(t("notifications.toast.permDenied"));

@@ -64,6 +64,11 @@ export function AboutAndNotificationsCards({ familyId }: { familyId: string }) {
   const handleEnableNotifications = async () => {
     try {
       if (Capacitor.isNativePlatform()) {
+        const ver = await getInstalledAndroidVersion();
+        if (ver?.fcmConfigured !== true) {
+          toast.error("APK ini belum dilengkapi konfigurasi Firebase. Install APK terbaru.");
+          return;
+        }
         const req = await PushNotifications.requestPermissions();
         if (req.receive === "granted") {
           setPermStatus("granted");

@@ -113,6 +113,11 @@ export function PushInitializer() {
         );
         handles.push(actionHandle);
 
+        const versionInfo = await getInstalledAndroidVersion();
+        if (cancelled || versionInfo?.fcmConfigured !== true) {
+          return;
+        }
+
         const perm = await PushNotifications.checkPermissions();
         if (!cancelled && perm.receive === "granted") {
           await PushNotifications.register();

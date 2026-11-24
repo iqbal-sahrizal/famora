@@ -21,10 +21,16 @@ public class AppUpdaterPlugin extends Plugin {
             PackageInfo info = pm.getPackageInfo(getContext().getPackageName(), 0);
             long versionCode = PackageInfoCompat.getLongVersionCode(info);
             String versionName = info.versionName != null ? info.versionName : "1.0.0";
+            int googleAppIdRes = getContext().getResources().getIdentifier(
+                "google_app_id",
+                "string",
+                getContext().getPackageName()
+            );
 
             JSObject ret = new JSObject();
             ret.put("versionCode", versionCode);
             ret.put("versionName", versionName);
+            ret.put("fcmConfigured", googleAppIdRes != 0);
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Unable to read installed app version.", e);

@@ -6,6 +6,7 @@ import { isTrustedApkUrl } from "./policy";
 export interface InstalledAndroidVersion {
   versionCode: number;
   versionName: string;
+  fcmConfigured?: boolean;
 }
 
 interface AppUpdaterNativePlugin {
