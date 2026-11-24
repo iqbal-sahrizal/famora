@@ -5,12 +5,17 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import androidx.activity.OnBackPressedCallback;
 import androidx.core.graphics.Insets;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -20,6 +25,8 @@ import com.getcapacitor.WebViewListener;
 
 public class MainActivity extends BridgeActivity {
     private boolean currentWebDarkMode = false;
+    private FrameLayout famoraSplashOverlay;
+    private boolean splashDismissed = false;
 
     private static final String THEME_SYNC_SCRIPT =
         "(function(){" +
@@ -44,6 +51,7 @@ public class MainActivity extends BridgeActivity {
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
 
         View rootView = findViewById(android.R.id.content);
@@ -59,6 +67,8 @@ public class MainActivity extends BridgeActivity {
             ViewCompat.requestApplyInsets(rootView);
         }
 
+        attachFamoraSplashOverlay();
+
         // Famora defaults to light theme (#F7F5EF) regardless of system night mode.
         applySystemBarAppearance(currentWebDarkMode);
 
@@ -71,6 +81,7 @@ public class MainActivity extends BridgeActivity {
                 @Override
                 public void onPageLoaded(WebView webView) {
                     syncThemeFromWebView();
+                    runOnUiThread(() -> dismissFamoraSplashOverlay());
                 }
             });
         }
@@ -102,6 +113,60 @@ public class MainActivity extends BridgeActivity {
         super.onConfigurationChanged(newConfig);
         applySystemBarAppearance(currentWebDarkMode);
         syncThemeFromWebView();
+    }
+
+    private void attachFamoraSplashOverlay() {
+        ViewGroup contentView = findViewById(android.R.id.content);
+        if (contentView == null || famoraSplashOverlay != null) {
+            return;
+        }
+
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.parseColor("#F7F5EF"));
+        overlay.setClickable(true);
+        overlay.setFocusable(true);
+
+        int iconSizePx = Math.round(288 * getResources().getDisplayMetrics().density);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.splash_icon);
+        logo.setContentDescription("Famora");
+        FrameLayout.LayoutParams logoParams = new FrameLayout.LayoutParams(
+            iconSizePx,
+            iconSizePx,
+            Gravity.CENTER
+        );
+        overlay.addView(logo, logoParams);
+
+        contentView.addView(
+            overlay,
+            new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        );
+        famoraSplashOverlay = overlay;
+        overlay.postDelayed(this::dismissFamoraSplashOverlay, 5000);
+    }
+
+    private void dismissFamoraSplashOverlay() {
+        if (splashDismissed || famoraSplashOverlay == null) {
+            return;
+        }
+        splashDismissed = true;
+        FrameLayout overlay = famoraSplashOverlay;
+        overlay.animate()
+            .alpha(0f)
+            .setDuration(260)
+            .withEndAction(() -> {
+                ViewGroup parent = (ViewGroup) overlay.getParent();
+                if (parent != null) {
+                    parent.removeView(overlay);
+                }
+                if (famoraSplashOverlay == overlay) {
+                    famoraSplashOverlay = null;
+                }
+            })
+            .start();
     }
 
     private void syncThemeFromWebView() {
