@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="famora_splash_bg">#F7F5EF</color>
+    <color name="senvamily_notification_accent">#315C49</color>
 </resources>
