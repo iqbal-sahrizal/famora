@@ -79,15 +79,23 @@ export function computeBudgetProgress(params: {
 }
 
 export const FINANCE_CATEGORY_SPECS = [
+  { value: "Food & Beverages", labelKey: "budgets.cat.foodBeverages" },
   { value: "Groceries", labelKey: "budgets.cat.groceries" },
+  { value: "Household", labelKey: "budgets.cat.household" },
   { value: "Utilities", labelKey: "budgets.cat.utilities" },
   { value: "Housing", labelKey: "budgets.cat.housing" },
   { value: "Transport", labelKey: "budgets.cat.transport" },
   { value: "Dining", labelKey: "budgets.cat.dining" },
+  { value: "Kids & Toys", labelKey: "budgets.cat.kidsToys" },
   { value: "Health", labelKey: "budgets.cat.health" },
+  { value: "Personal Care", labelKey: "budgets.cat.personalCare" },
+  { value: "Clothing", labelKey: "budgets.cat.clothing" },
+  { value: "Electronics", labelKey: "budgets.cat.electronics" },
   { value: "Education", labelKey: "budgets.cat.education" },
   { value: "Subscriptions", labelKey: "budgets.cat.subscriptions" },
   { value: "Entertainment", labelKey: "budgets.cat.entertainment" },
+  { value: "Gifts & Social", labelKey: "budgets.cat.giftsSocial" },
+  { value: "Pets", labelKey: "budgets.cat.pets" },
   { value: "Shopping", labelKey: "budgets.cat.shopping" },
   { value: "Other", labelKey: "budgets.cat.other" },
 ] as const;

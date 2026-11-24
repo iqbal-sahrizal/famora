@@ -470,11 +470,19 @@ export function FamilyShoppingView({
 
   const shoppingCategoryOptions = React.useMemo(() => {
     const base = [
+      { value: "Food & Beverages", label: t("budgets.cat.foodBeverages") },
       { value: "Groceries", label: t("shopping.cat.groceries") },
       { value: "Produce", label: t("shopping.cat.produce") },
       { value: "Dairy", label: t("shopping.cat.dairy") },
       { value: "Household", label: t("shopping.cat.household") },
+      { value: "Kids & Toys", label: t("budgets.cat.kidsToys") },
       { value: "Pharmacy", label: t("shopping.cat.pharmacy") },
+      { value: "Personal Care", label: t("budgets.cat.personalCare") },
+      { value: "Clothing", label: t("budgets.cat.clothing") },
+      { value: "Electronics", label: t("budgets.cat.electronics") },
+      { value: "Pets", label: t("budgets.cat.pets") },
+      { value: "Gifts & Social", label: t("budgets.cat.giftsSocial") },
+      { value: "Other", label: t("budgets.cat.other") },
     ];
     if (
       editItemCategory.trim() &&
