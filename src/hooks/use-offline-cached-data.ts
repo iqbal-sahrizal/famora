@@ -36,16 +36,9 @@ export function useOfflineCachedData<T>({
 
   React.useEffect(() => {
     let active = true;
-    if (isOnline && serverHasData) {
-      void writeOfflineCache(familyId, domain, serverData).then(() => {
-        if (active) {
-          setCachedEntry({
-            familyId,
-            data: serverData,
-            cachedAt: new Date().toISOString(),
-          });
-        }
-      });
+    if (isOnline) {
+      setCachedEntry(null);
+      void writeOfflineCache(familyId, domain, serverData);
     } else if (!serverHasData) {
       void readOfflineCache<T>(familyId, domain).then((entry) => {
         if (!active) return;
@@ -65,7 +58,7 @@ export function useOfflineCachedData<T>({
 
   const matchingCache =
     cachedEntry && cachedEntry.familyId === familyId ? cachedEntry : null;
-  const isFromCache = !serverHasData && matchingCache !== null;
+  const isFromCache = !isOnline && !serverHasData && matchingCache !== null;
   const effectiveData = isFromCache ? matchingCache.data : serverData;
   const cachedAt = isFromCache ? matchingCache.cachedAt : null;
   const isCacheExpired =
