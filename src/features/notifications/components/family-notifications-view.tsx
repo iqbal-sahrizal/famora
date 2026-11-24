@@ -3,6 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
+import { PushNotifications } from "@capacitor/push-notifications";
 import {
   Bell,
   BellOff,
@@ -15,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { registerFcmTokenWithBackend } from "@/components/notifications/push-initializer";
 import { PageHeader, Section } from "@/components/layout/primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -181,6 +184,30 @@ export function FamilyNotificationsView({
   };
 
   const handleEnableBrowserPush = async () => {
+    if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
+      setSubscribingPush(true);
+      try {
+        const perm = await PushNotifications.requestPermissions();
+        if (perm.receive !== "granted") {
+          toast.error(t("notifications.toast.permDenied"));
+          return;
+        }
+        await PushNotifications.addListener("registration", (token) => {
+          void registerFcmTokenWithBackend(token.value);
+        });
+        await PushNotifications.register();
+        toast.success(t("notifications.toast.subscribed"));
+        router.refresh();
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? te(err.message) : t("notifications.pushSubscribeFail")
+        );
+      } finally {
+        setSubscribingPush(false);
+      }
+      return;
+    }
+
     if (
       typeof window === "undefined" ||
       !("Notification" in window) ||
