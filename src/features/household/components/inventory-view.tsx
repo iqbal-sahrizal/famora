@@ -50,7 +50,6 @@ export function InventoryView({
   const [itemCat, setItemCat] = React.useState<"pantry" | "fridge" | "freezer" | "cleaning" | "medicine" | "supplies">("pantry");
   const [qty, setQty] = React.useState("1");
   const [unit, setUnit] = React.useState("unit");
-  const [minThreshold, setMinThreshold] = React.useState("0");
   const [expiresOn, setExpiresOn] = React.useState("");
 
   const lowStockItems = data.items.filter(
@@ -80,14 +79,13 @@ export function InventoryView({
     e.preventDefault();
     setBusy(true);
     const parsedQty = Number(qty);
-    const parsedMin = Number(minThreshold);
     const payload = {
       familyId,
       name,
       category: itemCat,
       quantity: Number.isFinite(parsedQty) && parsedQty >= 0 ? parsedQty : 0,
       unit,
-      minThreshold: Number.isFinite(parsedMin) && parsedMin >= 0 ? parsedMin : 0,
+      minThreshold: 0,
       expiresOn: expiresOn || null,
     };
     const res = editingItemId
@@ -119,7 +117,6 @@ export function InventoryView({
                 setItemCat("pantry");
                 setQty("1");
                 setUnit("unit");
-                setMinThreshold("0");
                 setExpiresOn("");
                 setAddOpen(true);
               }}
@@ -254,7 +251,6 @@ export function InventoryView({
                             setItemCat(item.category as typeof itemCat);
                             setQty(String(item.quantity));
                             setUnit(item.unit);
-                            setMinThreshold(String(item.minThreshold));
                             setExpiresOn(item.expiresOn ?? "");
                             setAddOpen(true);
                           }}
@@ -317,9 +313,8 @@ export function InventoryView({
             <Select label={t("inv.modal.location")} value={itemCat} onChange={(e) => setItemCat(e.target.value as typeof itemCat)} options={[{ value: "pantry", label: t("inv.cat.pantry") }, { value: "fridge", label: t("inv.cat.fridge") }, { value: "freezer", label: t("inv.cat.freezer") }, { value: "cleaning", label: t("inv.cat.cleaning") }, { value: "medicine", label: t("inv.cat.medicine") }, { value: "supplies", label: t("inv.cat.supplies") }]} />
             <Select label={t("inv.modal.unit")} value={unit} onChange={(e) => setUnit(e.target.value)} options={assetUnitOptions} />
             <Input label={t("inv.modal.quantity")} type="number" step="1" value={qty} onChange={(e) => setQty(e.target.value)} />
-            <Input label={t("inv.modal.lowStockAt")} type="number" step="1" value={minThreshold} onChange={(e) => setMinThreshold(e.target.value)} />
+            <Input label={t("inv.modal.expiresOn")} type="date" value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} />
           </div>
-          <Input label={t("inv.modal.expiresOn")} type="date" value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} />
           <Button type="submit" className="w-full" isLoading={busy}>{t("inv.modal.saveItem")}</Button>
         </form>
       </BottomSheet>
