@@ -6,6 +6,7 @@ import { clientEnv } from "@/lib/env";
 import { routes } from "@/lib/routes";
 import { createInvitationToken } from "@/lib/security/tokens";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyFamilyMembers } from "@/features/notifications/triggers";
 import {
   invitationTargetSchema,
   inviteMemberSchema,
@@ -205,7 +206,31 @@ export async function acceptInvitationByTokenAction(
     if (error || !data) {
       return { ok: false, error: error?.message ?? "Invitation is invalid or expired." };
     }
-    return { ok: true, data: { memberId: String(data) } };
+    const newMemberId = String(data);
+    void (async () => {
+      try {
+        const { data: joined } = await supabase
+          .from("family_members")
+          .select("family_id, display_name")
+          .eq("id", newMemberId)
+          .maybeSingle<{ family_id: string; display_name: string }>();
+        if (joined?.family_id) {
+          await notifyFamilyMembers({
+            familyId: joined.family_id,
+            excludeMemberId: newMemberId,
+            category: "invitation",
+            domain: "family",
+            title: "Anggota Baru Bergabung",
+            body: `${joined.display_name || "Anggota baru"} telah menerima undangan keluarga.`,
+            deepLink: routes.familyDomain(joined.family_id, "family"),
+            idempotencyPrefix: `invite-accepted:${newMemberId}`,
+          });
+        }
+      } catch {
+        // non-blocking
+      }
+    })();
+    return { ok: true, data: { memberId: newMemberId } };
   } catch (err) {
     return {
       ok: false,

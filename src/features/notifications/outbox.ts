@@ -1,4 +1,18 @@
+import { createClient } from "@supabase/supabase-js";
+import { clientEnv, getServerEnv } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+function getNotificationAdminOrUserClient(
+  fallback: Awaited<ReturnType<typeof createSupabaseServerClient>>
+) {
+  const { SUPABASE_SERVICE_ROLE_KEY } = getServerEnv();
+  if (clientEnv.NEXT_PUBLIC_SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    return createClient(clientEnv.NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return fallback;
+}
 import {
   computeNextRetryDelaySeconds,
   evaluateDeliveryDecision,
@@ -20,7 +34,8 @@ export async function enqueueFamilyNotification(params: {
   idempotencyKey: string;
   scheduledFor?: string;
 }): Promise<{ ok: boolean; notificationId?: string; deduplicated?: boolean; error?: string }> {
-  const supabase = await createSupabaseServerClient();
+  const userSupabase = await createSupabaseServerClient();
+  const supabase = getNotificationAdminOrUserClient(userSupabase);
 
   const { data: member } = await supabase
     .from("family_members")
@@ -129,7 +144,8 @@ export async function enqueueAndDispatchFamilyNotification(params: {
       return res;
     }
 
-    const supabase = await createSupabaseServerClient();
+    const userSupabase = await createSupabaseServerClient();
+    const supabase = getNotificationAdminOrUserClient(userSupabase);
     const { data: pushOutbox } = await supabase
       .from("notification_outbox")
       .select("id")
@@ -158,7 +174,8 @@ export async function processPushOutboxItem(params: {
   outboxId: string;
   expectedRecipientMemberId?: string;
 }): Promise<{ ok: boolean; status: string; error?: string }> {
-  const supabase = await createSupabaseServerClient();
+  const userSupabase = await createSupabaseServerClient();
+  const supabase = getNotificationAdminOrUserClient(userSupabase);
 
   const { data: outbox } = await supabase
     .from("notification_outbox")

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "@/features/auth/server";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyFamilyMembers } from "@/features/notifications/triggers";
 import type { PermissionKey } from "@/types/domain";
 import { canAccessConversation } from "./realtime-utils";
 import { hydrateMessagesPage } from "./server";
@@ -261,6 +262,16 @@ export async function sendChatMessageAction(formData: FormData): Promise<{
   ]);
 
   revalidatePath(routes.familyDomain(parsed.data.familyId, "chat"));
+  void notifyFamilyMembers({
+    familyId: parsed.data.familyId,
+    excludeMemberId: access.actor.id,
+    category: "chat",
+    domain: "chat",
+    title: `Pesan baru dari ${access.actor.display_name}`,
+    body: "Buka Senvamily untuk melihat pesan keluarga.",
+    deepLink: routes.familyDomain(parsed.data.familyId, "chat"),
+    idempotencyPrefix: `chat:${inserted.id}`,
+  });
   return {
     ok: true,
     message: {

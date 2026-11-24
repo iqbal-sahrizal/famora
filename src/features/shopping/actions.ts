@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuthenticatedUser } from "@/features/auth/server";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyFamilyMember, notifyFamilyMembers } from "@/features/notifications/triggers";
 import {
   addShoppingItemSchema,
   createShoppingListSchema,
@@ -220,6 +221,30 @@ export async function addShoppingItemAction(
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    if (parsed.data.assignedShopperMemberId) {
+      void notifyFamilyMember({
+        familyId: parsed.data.familyId,
+        recipientMemberId: parsed.data.assignedShopperMemberId,
+        excludeMemberId: actor.id,
+        category: "shopping",
+        domain: "shopping",
+        title: "Daftar Belanja Diperbarui",
+        body: "Ada item belanja baru untuk Anda.",
+        deepLink: routes.familyDomain(parsed.data.familyId, "shopping"),
+        idempotencyKey: `shopping-item:${parsed.data.familyId}:${Date.now()}:${parsed.data.assignedShopperMemberId}`,
+      });
+    } else {
+      void notifyFamilyMembers({
+        familyId: parsed.data.familyId,
+        excludeMemberId: actor.id,
+        category: "shopping",
+        domain: "shopping",
+        title: "Daftar Belanja Diperbarui",
+        body: "Ada item belanja keluarga baru.",
+        deepLink: routes.familyDomain(parsed.data.familyId, "shopping"),
+        idempotencyPrefix: `shopping-item:${parsed.data.familyId}:${Date.now()}`,
+      });
+    }
     return { ok: true };
   } catch (err) {
     return {

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuthenticatedUser } from "@/features/auth/server";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyFamilyMembers } from "@/features/notifications/triggers";
 import { parseDecimalToMinorUnits } from "./money";
 import {
   archiveFinanceAccountSchema,
@@ -258,6 +259,15 @@ export async function recordFinanceTransactionAction(
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "finance"));
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    void notifyFamilyMembers({
+      familyId: parsed.data.familyId,
+      category: "bill_reminder",
+      domain: "finance",
+      title: "Aktivitas Keuangan Keluarga",
+      body: "Ada pencatatan transaksi keuangan baru.",
+      deepLink: routes.familyDomain(parsed.data.familyId, "finance"),
+      idempotencyPrefix: `finance-tx:${String(data)}`,
+    });
     return { ok: true, id: String(data) };
   } catch (err) {
     return {

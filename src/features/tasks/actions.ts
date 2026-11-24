@@ -6,6 +6,7 @@ import { requireAuthenticatedUser } from "@/features/auth/server";
 import { validateDocumentFile } from "@/features/documents/validation";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyFamilyMembers } from "@/features/notifications/triggers";
 import {
   addTaskAttachmentSchema,
   addTaskCommentSchema,
@@ -209,6 +210,19 @@ export async function saveTaskAction(input: SaveTaskInput): Promise<TaskActionRe
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
     if (calendarEventId) {
       revalidatePath(routes.familyDomain(parsed.data.familyId, "calendar"));
+    }
+    if (!isEdit && parsed.data.assigneeMemberIds.length > 0) {
+      void notifyFamilyMembers({
+        familyId: parsed.data.familyId,
+        onlyMemberIds: parsed.data.assigneeMemberIds,
+        excludeMemberId: actor.id,
+        category: "task_assignment",
+        domain: "tasks",
+        title: parsed.data.title,
+        body: "Anda mendapat tugas keluarga baru.",
+        deepLink: routes.familyDomain(parsed.data.familyId, "tasks"),
+        idempotencyPrefix: `task-assigned:${taskId}`,
+      });
     }
     return { ok: true, taskId };
   } catch (err) {

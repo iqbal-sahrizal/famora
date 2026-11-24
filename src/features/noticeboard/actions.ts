@@ -6,6 +6,7 @@ import { requireAuthenticatedUser } from "@/features/auth/server";
 import { validateDocumentFile } from "@/features/documents/validation";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyFamilyMembers } from "@/features/notifications/triggers";
 import {
   castVoteSchema,
   createAnnouncementSchema,
@@ -97,6 +98,16 @@ export async function createAnnouncementAction(
     }
     revalidatePath(routes.familyDomain(parsed.data.familyId, "noticeboard"));
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    void notifyFamilyMembers({
+      familyId: parsed.data.familyId,
+      excludeMemberId: memberId,
+      category: "announcement",
+      domain: "noticeboard",
+      title: parsed.data.title,
+      body: "Ada pengumuman baru di papan keluarga.",
+      deepLink: routes.familyDomain(parsed.data.familyId, "noticeboard"),
+      idempotencyPrefix: `announcement:${parsed.data.familyId}:${Date.now()}`,
+    });
     return { ok: true };
   } catch (err) {
     return {

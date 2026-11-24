@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuthenticatedUser } from "@/features/auth/server";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyFamilyMembers } from "@/features/notifications/triggers";
 import {
   calendarEventInputSchema,
   rsvpSchema,
@@ -154,6 +155,19 @@ export async function saveCalendarEventAction(
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "calendar"));
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    if (!parsed.data.eventId) {
+      void notifyFamilyMembers({
+        familyId: parsed.data.familyId,
+        excludeMemberId: actor.id,
+        onlyMemberIds: uniqueParticipants.length > 0 ? uniqueParticipants : undefined,
+        category: "calendar",
+        domain: "calendar",
+        title: parsed.data.title,
+        body: "Ada jadwal acara keluarga baru.",
+        deepLink: routes.familyDomain(parsed.data.familyId, "calendar"),
+        idempotencyPrefix: `calendar-event:${eventId}`,
+      });
+    }
     return { ok: true, eventId };
   } catch (err) {
     return {

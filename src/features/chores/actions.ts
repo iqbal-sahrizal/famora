@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAuthenticatedUser } from "@/features/auth/server";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { notifyFamilyMember, notifyFamilyMembers } from "@/features/notifications/triggers";
 import {
   choreTemplateSchema,
   familyChallengeSchema,
@@ -102,6 +103,16 @@ export async function submitChoreCompletionAction(
 
     if (error) return { ok: false, error: error.message };
     revalidatePath(routes.familyDomain(parsed.data.familyId, "chores"));
+    void notifyFamilyMembers({
+      familyId: parsed.data.familyId,
+      excludeMemberId: actor.id,
+      category: "task_assignment",
+      domain: "chores",
+      title: parsed.data.title,
+      body: "Ada penyelesaian chore yang menunggu persetujuan.",
+      deepLink: routes.familyDomain(parsed.data.familyId, "chores"),
+      idempotencyPrefix: `chore-submit:${parsed.data.familyId}:${Date.now()}`,
+    });
     return { ok: true };
   } catch (err) {
     return {
@@ -132,6 +143,31 @@ export async function reviewChoreSubmissionAction(
 
     if (error) return { ok: false, error: error.message };
     revalidatePath(routes.familyDomain(parsed.data.familyId, "chores"));
+    void (async () => {
+      try {
+        const { data: sub } = await supabase
+          .from("chore_submissions")
+          .select("member_id, title")
+          .eq("id", parsed.data.submissionId)
+          .maybeSingle<{ member_id: string; title: string }>();
+        if (sub?.member_id) {
+          await notifyFamilyMember({
+            familyId: parsed.data.familyId,
+            recipientMemberId: sub.member_id,
+            category: "activity",
+            domain: "chores",
+            title: parsed.data.approved ? `Chore disetujui: ${sub.title}` : `Chore ditolak: ${sub.title}`,
+            body: parsed.data.approved
+              ? "Poin chore kamu sudah ditambahkan."
+              : "Periksa catatan review chore di Senvamily.",
+            deepLink: routes.familyDomain(parsed.data.familyId, "chores"),
+            idempotencyKey: `chore-review:${parsed.data.submissionId}:${parsed.data.approved ? "ok" : "no"}`,
+          });
+        }
+      } catch {
+        // non-blocking
+      }
+    })();
     return { ok: true };
   } catch (err) {
     return {
