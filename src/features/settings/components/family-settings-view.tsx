@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, Section } from "@/components/layout/primitives";
+import { AboutAndNotificationsCards } from "@/components/settings/about-senvamily-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -672,6 +673,8 @@ export function FamilySettingsView({
           </Card>
         </div>
       )}
+
+      <AboutAndNotificationsCards familyId={familyId} />
 
       {canDeleteFamily && data.family && (
         <BottomSheet

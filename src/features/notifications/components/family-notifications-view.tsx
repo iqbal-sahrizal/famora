@@ -50,6 +50,8 @@ const CATEGORY_KEYS: Record<NotificationCategory, Parameters<ReturnType<typeof u
   document_expiration: "notifications.cat.document_expiration",
   chat: "notifications.cat.chat",
   activity: "notifications.cat.activity",
+  system_update: "notifications.cat.system_update",
+  app_update: "notifications.cat.app_update",
 };
 
 function urlBase64ToUint8Array(base64String: string): ArrayBuffer {

@@ -18,7 +18,12 @@ import {
   DOMAIN_NAV_ITEMS,
   type NavItemConfig,
 } from "@/config/navigation";
+import {
+  PushInitializer,
+  unregisterCurrentAndroidDevice,
+} from "@/components/notifications/push-initializer";
 import { PwaStatusBar } from "@/components/pwa/pwa-status-bar";
+import { AppUpdateGate } from "@/components/updates/app-update-gate";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/ui/navigation";
@@ -94,6 +99,7 @@ export function AppShell({
 
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
+    await unregisterCurrentAndroidDevice();
     const res = await logoutAction();
     setLoggingOut(false);
     if (!res.ok) {
@@ -109,6 +115,10 @@ export function AppShell({
 
   return (
     <div className="flex min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+      <PushInitializer />
+      <React.Suspense fallback={null}>
+        <AppUpdateGate />
+      </React.Suspense>
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-[var(--accent-primary)] focus:px-4 focus:py-2 focus:text-[13px] focus:font-semibold focus:text-[var(--accent-primary-fg)]"

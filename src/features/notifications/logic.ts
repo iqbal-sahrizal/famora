@@ -15,6 +15,8 @@ export const ALL_NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   "document_expiration",
   "chat",
   "activity",
+  "system_update",
+  "app_update",
 ];
 
 const CATEGORY_GENERIC_PUSH_TITLE: Record<NotificationCategory, string> = {
@@ -28,6 +30,8 @@ const CATEGORY_GENERIC_PUSH_TITLE: Record<NotificationCategory, string> = {
   document_expiration: "Document Expiration Notice",
   chat: "New Family Message",
   activity: "Family Activity Update",
+  system_update: "Senvamily System Notice",
+  app_update: "Senvamily Update Tersedia",
 };
 
 function parseHHMMToMinutes(timeStr: string | null | undefined): number | null {
@@ -63,12 +67,26 @@ export function isWithinQuietHours(
   return nowMin >= startMin || nowMin < endMin;
 }
 
+export function validateNotificationDeepLink(rawUrl: string | null | undefined): string {
+  if (!rawUrl || typeof rawUrl !== "string") return "/";
+  const trimmed = rawUrl.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || /[\r\n]/.test(trimmed)) {
+    return "/";
+  }
+  return trimmed;
+}
+
 export function evaluateDeliveryDecision(params: {
   channel: "in_app" | "push";
   category: NotificationCategory;
   preferences: NotificationPreferences;
   nowDate: Date;
+  isMandatory?: boolean;
 }): { deliver: boolean; reason?: "suppressed_preference" | "suppressed_quiet_hours" } {
+  if (params.isMandatory) {
+    return { deliver: true };
+  }
+
   if (params.preferences.disabledCategories.includes(params.category)) {
     return { deliver: false, reason: "suppressed_preference" };
   }
@@ -160,6 +178,14 @@ export const pushSubscriptionSchema = z.object({
   auth: z.string().min(8).max(256),
 });
 
+export const fcmDeviceRegistrationSchema = z.object({
+  deviceLabel: z.string().trim().min(1).max(80).default("Android Device"),
+  deviceFingerprint: z.string().trim().min(8).max(160),
+  fcmToken: z.string().trim().min(16).max(4096),
+  appVersionCode: z.number().int().positive().optional(),
+  appVersionName: z.string().trim().min(1).max(40).optional(),
+});
+
 export const updatePreferencesSchema = z.object({
   familyId: z.string().uuid(),
   inAppEnabled: z.boolean(),
@@ -187,6 +213,8 @@ export const updatePreferencesSchema = z.object({
         "document_expiration",
         "chat",
         "activity",
+        "system_update",
+        "app_update",
       ])
     )
     .default([]),

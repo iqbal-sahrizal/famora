@@ -85,7 +85,7 @@ export async function getNotificationsPageData(
       supabase
         .from("user_devices")
         .select(
-          "id, device_label, platform, push_endpoint, last_seen_at, revoked_at"
+          "id, device_label, platform, push_endpoint, fcm_token, app_version_code, app_version_name, last_seen_at, revoked_at"
         )
         .eq("user_id", user.id)
         .order("last_seen_at", { ascending: false }),
@@ -146,8 +146,11 @@ export async function getNotificationsPageData(
       (deviceRows as Array<{
         id: string;
         device_label: string;
-        platform: "web" | "ios_pwa" | "android_pwa" | "desktop_pwa";
+        platform: "web" | "ios_pwa" | "android_pwa" | "desktop_pwa" | "android_fcm";
         push_endpoint: string | null;
+        fcm_token: string | null;
+        app_version_code: number | null;
+        app_version_name: string | null;
         last_seen_at: string;
         revoked_at: string | null;
       }>) ?? []
@@ -155,7 +158,9 @@ export async function getNotificationsPageData(
       id: d.id,
       deviceLabel: d.device_label,
       platform: d.platform,
-      hasPushSubscription: Boolean(d.push_endpoint && !d.revoked_at),
+      hasPushSubscription: Boolean((d.push_endpoint || d.fcm_token) && !d.revoked_at),
+      appVersionCode: d.app_version_code,
+      appVersionName: d.app_version_name,
       lastSeenAt: d.last_seen_at,
       revokedAt: d.revoked_at,
     }));

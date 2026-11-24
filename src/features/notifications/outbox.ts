@@ -6,6 +6,7 @@ import {
   validateNotificationRecipient,
 } from "./logic";
 import type { NotificationCategory, NotificationPreferences } from "./types";
+import { dispatchFcmPushNotification } from "./fcm";
 import { dispatchVapidPushNotification } from "./vapid";
 
 export async function enqueueFamilyNotification(params: {
@@ -105,6 +106,51 @@ export async function enqueueFamilyNotification(params: {
   );
 
   return { ok: true, notificationId: inserted.id };
+}
+
+/**
+ * Enqueues a family notification and attempts immediate non-blocking push dispatch.
+ * Never throws so caller transactions remain unaffected if push delivery fails.
+ */
+export async function enqueueAndDispatchFamilyNotification(params: {
+  familyId: string;
+  recipientMemberId: string;
+  category: NotificationCategory;
+  domain: string;
+  title: string;
+  body: string;
+  deepLink: string;
+  idempotencyKey: string;
+  scheduledFor?: string;
+}): Promise<{ ok: boolean; notificationId?: string; deduplicated?: boolean; error?: string }> {
+  try {
+    const res = await enqueueFamilyNotification(params);
+    if (!res.ok || res.deduplicated || !res.notificationId) {
+      return res;
+    }
+
+    const supabase = await createSupabaseServerClient();
+    const { data: pushOutbox } = await supabase
+      .from("notification_outbox")
+      .select("id")
+      .eq("notification_id", res.notificationId)
+      .eq("channel", "push")
+      .maybeSingle<{ id: string }>();
+
+    if (pushOutbox?.id) {
+      void processPushOutboxItem({
+        familyId: params.familyId,
+        outboxId: pushOutbox.id,
+      }).catch(() => undefined);
+    }
+
+    return res;
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to enqueue notification.",
+    };
+  }
 }
 
 export async function processPushOutboxItem(params: {
@@ -213,17 +259,19 @@ export async function processPushOutboxItem(params: {
 
   const { data: devices } = await supabase
     .from("user_devices")
-    .select("id, push_endpoint, push_p256dh, push_auth")
+    .select("id, platform, push_endpoint, push_p256dh, push_auth, fcm_token")
     .eq("user_id", outbox.recipient_user_id)
     .is("revoked_at", null)
-    .not("push_endpoint", "is", null);
+    .or("push_endpoint.not.is.null,fcm_token.not.is.null");
 
   const activeDevices =
     (devices as Array<{
       id: string;
-      push_endpoint: string;
+      platform: string;
+      push_endpoint: string | null;
       push_p256dh: string | null;
       push_auth: string | null;
+      fcm_token: string | null;
     }>) ?? [];
   if (activeDevices.length === 0) {
     await Promise.all([
@@ -243,6 +291,51 @@ export async function processPushOutboxItem(params: {
   let lastErrMsg = "";
 
   for (const device of activeDevices) {
+    if (device.platform === "android_fcm" && device.fcm_token) {
+      const fcmRes = await dispatchFcmPushNotification({
+        fcmToken: device.fcm_token,
+        title: outbox.payload.title,
+        body: outbox.payload.body,
+        deepLink: outbox.payload.url,
+        channelId:
+          notif?.category === "app_update" || notif?.category === "system_update"
+            ? "senvamily_updates"
+            : "senvamily_family",
+      });
+
+      if (fcmRes.ok) {
+        anyDelivered = true;
+        await supabase.from("notification_delivery_logs").insert({
+          family_id: outbox.family_id,
+          outbox_id: outbox.id,
+          device_id: device.id,
+          status: "sent",
+          http_status: fcmRes.statusCode ?? 200,
+        });
+      } else {
+        lastErrMsg = fcmRes.error ?? "FCM delivery failed";
+        if (fcmRes.unregistered) {
+          await supabase
+            .from("user_devices")
+            .update({ fcm_token: null, revoked_at: new Date().toISOString() })
+            .eq("id", device.id);
+        }
+        await supabase.from("notification_delivery_logs").insert({
+          family_id: outbox.family_id,
+          outbox_id: outbox.id,
+          device_id: device.id,
+          status: fcmRes.unregistered ? "expired_subscription" : "failed",
+          http_status: fcmRes.statusCode ?? null,
+          error_message: lastErrMsg,
+        });
+      }
+      continue;
+    }
+
+    if (!device.push_endpoint) {
+      continue;
+    }
+
     const res = await dispatchVapidPushNotification({
       endpoint: device.push_endpoint,
       p256dh: device.push_p256dh ?? "",

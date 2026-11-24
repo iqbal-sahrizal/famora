@@ -8,7 +8,9 @@ export type NotificationCategory =
   | "bill_reminder"
   | "document_expiration"
   | "chat"
-  | "activity";
+  | "activity"
+  | "system_update"
+  | "app_update";
 
 export type NotificationPushStatus =
   | "pending"
@@ -41,11 +43,20 @@ export interface NotificationPreferences {
   disabledCategories: NotificationCategory[];
 }
 
+export type DevicePlatform =
+  | "web"
+  | "ios_pwa"
+  | "android_pwa"
+  | "desktop_pwa"
+  | "android_fcm";
+
 export interface UserDeviceItem {
   id: string;
   deviceLabel: string;
-  platform: "web" | "ios_pwa" | "android_pwa" | "desktop_pwa";
+  platform: DevicePlatform;
   hasPushSubscription: boolean;
+  appVersionCode?: number | null;
+  appVersionName?: string | null;
   lastSeenAt: string;
   revokedAt: string | null;
 }

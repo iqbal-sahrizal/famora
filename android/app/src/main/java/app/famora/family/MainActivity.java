@@ -1,6 +1,8 @@
 package app.famora.family;
 
 import android.annotation.SuppressLint;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
@@ -52,7 +54,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SplashScreen.installSplashScreen(this);
+        registerPlugin(AppUpdaterPlugin.class);
         super.onCreate(savedInstanceState);
+        createSenvamilyNotificationChannels();
 
         View rootView = findViewById(android.R.id.content);
         if (rootView != null) {
@@ -113,6 +117,30 @@ public class MainActivity extends BridgeActivity {
         super.onConfigurationChanged(newConfig);
         applySystemBarAppearance(currentWebDarkMode);
         syncThemeFromWebView();
+    }
+
+    private void createSenvamilyNotificationChannels() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager == null) {
+                return;
+            }
+            NotificationChannel familyChannel = new NotificationChannel(
+                "senvamily_family",
+                "Aktivitas Keluarga",
+                NotificationManager.IMPORTANCE_HIGH
+            );
+            familyChannel.setDescription("Undangan, pengumuman, tugas, tagihan, dan jadwal keluarga.");
+            manager.createNotificationChannel(familyChannel);
+
+            NotificationChannel updateChannel = new NotificationChannel(
+                "senvamily_updates",
+                "Pembaruan Aplikasi",
+                NotificationManager.IMPORTANCE_HIGH
+            );
+            updateChannel.setDescription("Pemberitahuan versi terbaru Senvamily.");
+            manager.createNotificationChannel(updateChannel);
+        }
     }
 
     private void attachFamoraSplashOverlay() {
