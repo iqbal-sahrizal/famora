@@ -41,7 +41,10 @@ import {
   updateBudgetAction,
 } from "../budget-actions";
 import type { BudgetsBillsPageData } from "../budget-server";
-import { buildFinanceCategoryOptions } from "../budgets";
+import {
+  buildFinanceCategoryOptions,
+  formatFinanceCategoryLabel,
+} from "../budgets";
 import { formatNumericCurrency } from "../money";
 
 export function FamilyBudgetsBillsView({
@@ -217,7 +220,7 @@ export function FamilyBudgetsBillsView({
     setBusy(true);
     const res = await createRecurringScheduleAction({
       familyId,
-      accountId: sAccount,
+      accountId: sKind === "income" ? data.accounts[0]?.id ?? sAccount : sAccount,
       kind: sKind,
       merchant: sMerchant,
       category: sKind === "income" ? "Income" : "Subscriptions",
@@ -314,7 +317,7 @@ export function FamilyBudgetsBillsView({
                     <div>
                       <CardTitle>{b.name}</CardTitle>
                       <CardDescription>
-                        {b.category} · {t("budgets.dateRange", {
+                        {formatFinanceCategoryLabel(b.category, t)} · {t("budgets.dateRange", {
                           start: formatLocalizedDate(b.periodStart, locale),
                           end: formatLocalizedDate(b.periodEnd, locale),
                         })}
@@ -637,9 +640,11 @@ export function FamilyBudgetsBillsView({
 
       <BottomSheet open={scheduleOpen} onClose={() => setScheduleOpen(false)} title={t("budgets.modal.scheduleTitle")}>
         <form onSubmit={handleCreateSchedule} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className={cn("grid gap-3", sKind !== "income" && "sm:grid-cols-2")}>
             <Select label={t("budgets.modal.type")} value={sKind} onChange={(e) => setSKind(e.target.value as typeof sKind)} options={[{ value: "expense", label: t("budgets.modal.typeExpense") }, { value: "income", label: t("budgets.modal.typeIncome") }]} />
-            <Select label={t("budgets.modal.account")} value={sAccount} onChange={(e) => setSAccount(e.target.value)} options={data.accounts.map((a) => ({ value: a.id, label: a.name }))} />
+            {sKind !== "income" && (
+              <Select label={t("budgets.modal.account")} value={sAccount} onChange={(e) => setSAccount(e.target.value)} options={data.accounts.map((a) => ({ value: a.id, label: a.name }))} />
+            )}
           </div>
           <Input label={t("budgets.modal.merchant")} required placeholder={t("budgets.modal.merchantPlaceholder")} value={sMerchant} onChange={(e) => setSMerchant(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-3">

@@ -115,6 +115,19 @@ export function buildFinanceCategoryOptions(
   return options;
 }
 
+/**
+ * Formats a persisted category value into its localized display label when known.
+ */
+export function formatFinanceCategoryLabel(
+  category: string,
+  translate: (key: FinanceCategoryLabelKey) => string
+): string {
+  const match = FINANCE_CATEGORY_SPECS.find(
+    (spec) => spec.value.toLowerCase() === category.trim().toLowerCase()
+  );
+  return match ? translate(match.labelKey) : category;
+}
+
 export type ComputedBillStatus = "paid" | "overdue" | "due_soon" | "upcoming";
 
 export function classifyBillStatus(params: {

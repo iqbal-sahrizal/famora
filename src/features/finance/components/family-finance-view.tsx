@@ -46,7 +46,10 @@ import {
   minorUnitsToDecimalString,
   parseDecimalToMinorUnits,
 } from "../money";
-import { buildFinanceCategoryOptions } from "../budgets";
+import {
+  buildFinanceCategoryOptions,
+  formatFinanceCategoryLabel,
+} from "../budgets";
 import type { FinanceAccountItem, FinancePageData, FinanceTransactionItem } from "../server";
 
 const ACCOUNT_ICONS: Record<FinanceAccountItem["accountKind"], React.ReactNode> = {
@@ -84,7 +87,6 @@ export function FamilyFinanceView({
   const [accKind, setAccKind] =
     React.useState<FinanceAccountItem["accountKind"]>("bank");
   const [accScope, setAccScope] = React.useState<"family" | "personal">("family");
-  const [accInitial, setAccInitial] = React.useState("0.00");
 
   // Edit / Archive account state
   const [editAccount, setEditAccount] = React.useState<FinanceAccountItem | null>(null);
@@ -189,14 +191,13 @@ export function FamilyFinanceView({
       accountKind: accKind,
       ownershipScope: accScope,
       currencyCode: data.currencyCode,
-      initialBalance: accInitial,
+      initialBalance: "0.00",
       monthlyBudget: "0.00",
     });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setAccName("");
-      setAccInitial("0.00");
       setAccountOpen(false);
       toast.success(t("finance.toast.accountCreated"));
       router.refresh();
@@ -256,10 +257,12 @@ export function FamilyFinanceView({
       toast.error(t("finance.transferSameAccount"));
       return;
     }
+    const targetAccountId =
+      txKind === "income" ? activeAccounts[0]?.id ?? txAccountId : txAccountId;
     setBusy(true);
     const res = await recordFinanceTransactionAction({
       familyId,
-      accountId: txAccountId,
+      accountId: targetAccountId,
       kind: txKind,
       amount: txAmount,
       merchant: txMerchant,
@@ -561,7 +564,9 @@ export function FamilyFinanceView({
                         <p className="font-heading text-[15px] font-semibold">
                           {tx.merchant}
                         </p>
-                        <Badge variant="neutral">{tx.category}</Badge>
+                        <Badge variant="neutral">
+                          {formatFinanceCategoryLabel(tx.category, t)}
+                        </Badge>
                         {tx.isReversed && <Badge variant="peach">Reversed</Badge>}
                         {tx.attachmentName && (
                           <Badge variant="lavender">
@@ -570,7 +575,7 @@ export function FamilyFinanceView({
                         )}
                       </div>
                       <p className="text-[12px] text-[var(--text-secondary)]">
-                        {tx.accountName} · {tx.occurredOn} · {tx.memberName}
+                        {tx.kind === "income" ? t("finance.totalBalance") : tx.accountName} · {tx.occurredOn} · {tx.memberName}
                         {tx.notes ? ` — ${tx.notes}` : ""}
                       </p>
                     </div>
@@ -682,12 +687,6 @@ export function FamilyFinanceView({
               ]}
             />
           </div>
-          <Input
-            label={t("finance.modal.openingBalance")}
-            value={accInitial}
-            onChange={(e) => setAccInitial(e.target.value)}
-            className="tabular-nums"
-          />
           <Button type="submit" className="w-full" isLoading={busy}>
             {t("finance.modal.createAccountBtn")}
           </Button>
@@ -729,12 +728,14 @@ export function FamilyFinanceView({
             />
           </div>
 
-          <Select
-            label={txKind === "transfer" ? t("finance.modal.fromAccount") : t("finance.modal.accountLabel")}
-            value={txAccountId}
-            onChange={(e) => setTxAccountId(e.target.value)}
-            options={activeAccounts.map((a) => ({ value: a.id, label: a.name }))}
-          />
+          {txKind !== "income" && (
+            <Select
+              label={txKind === "transfer" ? t("finance.modal.fromAccount") : t("finance.modal.accountLabel")}
+              value={txAccountId}
+              onChange={(e) => setTxAccountId(e.target.value)}
+              options={activeAccounts.map((a) => ({ value: a.id, label: a.name }))}
+            />
+          )}
 
           {txKind === "transfer" && (
             <Select
@@ -918,7 +919,7 @@ export function FamilyFinanceView({
                   {selectedTx.merchant}
                 </p>
                 <p className="text-[13px] text-[var(--text-secondary)]">
-                  {selectedTx.accountName} · {selectedTx.occurredOn}
+                  {selectedTx.kind === "income" ? t("finance.totalBalance") : selectedTx.accountName} · {selectedTx.occurredOn}
                 </p>
               </div>
               <span
@@ -934,7 +935,9 @@ export function FamilyFinanceView({
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Badge variant="neutral">{selectedTx.category}</Badge>
+              <Badge variant="neutral">
+                {formatFinanceCategoryLabel(selectedTx.category, t)}
+              </Badge>
               <Badge variant="neutral">{selectedTx.memberName}</Badge>
               {selectedTx.isReversed && <Badge variant="peach">Reversed</Badge>}
             </div>
