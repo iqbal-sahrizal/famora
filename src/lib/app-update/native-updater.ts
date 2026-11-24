@@ -1,32 +1,16 @@
 "use client";
 
-import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
+import { isTrustedApkUrl } from "./policy";
 
 export interface InstalledAndroidVersion {
   versionCode: number;
   versionName: string;
 }
 
-export interface DownloadProgressEvent {
-  progress: number;
-  downloadedBytes: number;
-  totalBytes: number;
-}
-
 interface AppUpdaterNativePlugin {
   getAppVersion(): Promise<InstalledAndroidVersion>;
-  downloadAndVerifyApk(options: {
-    url: string;
-    sha256: string;
-    versionCode: number;
-  }): Promise<{ filePath: string; sha256: string; fileSize: number }>;
-  canRequestPackageInstalls(): Promise<{ granted: boolean }>;
-  openUnknownSourcesSettings(): Promise<void>;
-  installApk(options: { filePath: string }): Promise<{ status: "launched" | "completed" | "cancelled" }>;
-  addListener(
-    eventName: "downloadProgress",
-    listenerFunc: (event: DownloadProgressEvent) => void
-  ): Promise<PluginListenerHandle>;
+  openDownloadUrl(options: { url: string }): Promise<void>;
 }
 
 const AppUpdater = registerPlugin<AppUpdaterNativePlugin>("AppUpdater");
@@ -48,32 +32,13 @@ export async function getInstalledAndroidVersion(): Promise<InstalledAndroidVers
   }
 }
 
-export async function canRequestAndroidPackageInstalls(): Promise<boolean> {
-  if (!isNativeAndroidUpdaterAvailable()) return false;
-  const res = await AppUpdater.canRequestPackageInstalls();
-  return Boolean(res.granted);
-}
-
-export async function openAndroidUnknownSourcesSettings(): Promise<void> {
-  if (!isNativeAndroidUpdaterAvailable()) return;
-  await AppUpdater.openUnknownSourcesSettings();
-}
-
-export async function downloadAndVerifyAndroidApk(params: {
-  url: string;
-  sha256: string;
-  versionCode: number;
-}): Promise<{ filePath: string; sha256: string; fileSize: number }> {
-  return AppUpdater.downloadAndVerifyApk(params);
-}
-
-export async function installVerifiedAndroidApk(filePath: string) {
-  return AppUpdater.installApk({ filePath });
-}
-
-export async function addApkDownloadProgressListener(
-  cb: (event: DownloadProgressEvent) => void
-): Promise<PluginListenerHandle | null> {
-  if (!isNativeAndroidUpdaterAvailable()) return null;
-  return AppUpdater.addListener("downloadProgress", cb);
+export async function openAndroidApkDownloadInBrowser(url: string): Promise<void> {
+  if (!isTrustedApkUrl(url)) {
+    throw new Error("URL unduhan APK tidak dipercaya.");
+  }
+  if (isNativeAndroidUpdaterAvailable()) {
+    await AppUpdater.openDownloadUrl({ url });
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }

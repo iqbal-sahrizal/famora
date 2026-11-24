@@ -1,16 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, Download, RefreshCw, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SenvamilyLogo } from "@/components/ui/brand-logo";
-import {
-  addApkDownloadProgressListener,
-  canRequestAndroidPackageInstalls,
-  downloadAndVerifyAndroidApk,
-  installVerifiedAndroidApk,
-  openAndroidUnknownSourcesSettings,
-} from "@/lib/app-update/native-updater";
+import { openAndroidApkDownloadInBrowser } from "@/lib/app-update/native-updater";
 import { formatApkSize } from "@/lib/app-update/policy";
 import type { AndroidReleaseManifest } from "@/lib/app-update/types";
 
@@ -29,66 +23,30 @@ export function AppUpdateModal({
   manifest: AndroidReleaseManifest;
   onDismiss?: () => void;
 }) {
-  const [stage, setStage] = React.useState<
-    "idle" | "permission_needed" | "downloading" | "verifying" | "installing" | "error"
-  >("idle");
-  const [progress, setProgress] = React.useState(0);
+  const [opening, setOpening] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!open) {
-      setStage("idle");
-      setProgress(0);
+      setOpening(false);
       setErrorMsg(null);
     }
-  }, [open]);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const handlePromise = addApkDownloadProgressListener((evt) => {
-      setProgress(evt.progress);
-    });
-    return () => {
-      void handlePromise.then((h) => h?.remove());
-    };
   }, [open]);
 
   if (!open) return null;
 
   const handleStartUpdate = async () => {
     setErrorMsg(null);
+    setOpening(true);
     try {
-      const canInstall = await canRequestAndroidPackageInstalls();
-      if (!canInstall) {
-        setStage("permission_needed");
-        return;
-      }
-
-      setStage("downloading");
-      setProgress(0);
-      const downloaded = await downloadAndVerifyAndroidApk({
-        url: manifest.downloadUrl,
-        sha256: manifest.sha256,
-        versionCode: manifest.versionCode,
-      });
-
-      setStage("installing");
-      const result = await installVerifiedAndroidApk(downloaded.filePath);
-      if (result.status === "cancelled") {
-        setStage("idle");
-        setErrorMsg("Instalasi dibatalkan. Tekan Update Sekarang untuk mencoba lagi.");
-      }
+      await openAndroidApkDownloadInBrowser(manifest.downloadUrl);
     } catch (err) {
-      setStage("error");
       setErrorMsg(
-        err instanceof Error ? err.message : "Gagal mengunduh atau memverifikasi pembaruan."
+        err instanceof Error ? err.message : "Gagal membuka tautan unduhan pembaruan."
       );
+    } finally {
+      setOpening(false);
     }
-  };
-
-  const handleOpenSettings = async () => {
-    await openAndroidUnknownSourcesSettings();
-    setStage("idle");
   };
 
   const title = mandatory ? "Update Diperlukan" : "Update Senvamily";
@@ -161,37 +119,6 @@ export function AppUpdateModal({
           </div>
         )}
 
-        {stage === "downloading" && (
-          <div className="mt-4 space-y-1.5">
-            <div className="flex justify-between text-[12.5px] text-[var(--text-secondary)]">
-              <span>Mengunduh &amp; memverifikasi APK...</span>
-              <span className="tabular-nums font-semibold">{progress}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
-              <div
-                className="h-full rounded-full bg-[var(--accent-primary)] transition-all duration-200"
-                style={{ width: `${Math.max(4, progress)}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {stage === "permission_needed" && (
-          <div className="mt-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--tint-sand)] p-3.5 text-[13px] text-[var(--text-primary)]">
-            <div className="flex items-start gap-2">
-              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent-primary)]" />
-              <div className="space-y-2">
-                <p>
-                  Izinkan Senvamily memasang pembaruan aplikasi di pengaturan Android terlebih dahulu.
-                </p>
-                <Button size="sm" variant="secondary" onClick={() => void handleOpenSettings()}>
-                  Buka Pengaturan Izin
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {errorMsg && (
           <p className="mt-3 rounded-xl bg-[var(--status-danger-bg)] px-3 py-2 text-[12.5px] text-[var(--status-danger-fg)]">
             {errorMsg}
@@ -200,26 +127,14 @@ export function AppUpdateModal({
 
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
           {!mandatory && onDismiss && (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={stage === "downloading" || stage === "installing"}
-              onClick={onDismiss}
-            >
+            <Button type="button" variant="ghost" disabled={opening} onClick={onDismiss}>
               Nanti
             </Button>
           )}
-          <Button
-            type="button"
-            isLoading={stage === "downloading" || stage === "installing"}
-            onClick={() => void handleStartUpdate()}
-          >
-            {stage === "error" ? (
-              <RefreshCw className="h-4 w-4" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
+          <Button type="button" isLoading={opening} onClick={() => void handleStartUpdate()}>
+            <Download className="h-4 w-4" />
             Update Sekarang
+            <ExternalLink className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
