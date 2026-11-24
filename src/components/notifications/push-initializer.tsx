@@ -4,7 +4,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { PushNotifications } from "@capacitor/push-notifications";
-import { toast } from "sonner";
 import { validateNotificationDeepLink } from "@/features/notifications/logic";
 import { getInstalledAndroidVersion } from "@/lib/app-update/native-updater";
 
@@ -79,26 +78,6 @@ export function PushInitializer() {
           void registerFcmTokenWithBackend(token.value);
         });
         handles.push(regHandle);
-
-        const fgHandle = await PushNotifications.addListener(
-          "pushNotificationReceived",
-          (notification) => {
-            const rawUrl =
-              typeof notification.data?.url === "string" ? notification.data.url : "/";
-            const safeUrl = validateNotificationDeepLink(rawUrl);
-            toast.info(notification.title || "Senvamily", {
-              description: notification.body || undefined,
-              action:
-                safeUrl !== "/"
-                  ? {
-                      label: "Buka",
-                      onClick: () => router.push(safeUrl),
-                    }
-                  : undefined,
-            });
-          }
-        );
-        handles.push(fgHandle);
 
         const actionHandle = await PushNotifications.addListener(
           "pushNotificationActionPerformed",
