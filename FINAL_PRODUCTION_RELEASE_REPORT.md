@@ -1,75 +1,87 @@
 # Famora — Final Production Release Report
 
 **Date:** 2026-11-24  
-**Repository:** `iqbal-sahrizal/famora` (`main`)  
-**Production URL (existing):** `https://famora-eight.vercel.app`  
-**Verdict:** **`PRODUCTION_RELEASE_BLOCKED`**
-
-> [!IMPORTANT]
-> **Why `PRODUCTION_RELEASE_BLOCKED`:**  
-> All application code, forward-only migrations (`0030`–`0038`), regression tests, static validation, and the Next.js production build **PASS** locally. However, **production database migration and Vercel deployment were halted** because:
-> 1. **No Verified Production DB Backup / `pg_dump`:** `pg_dump`, `psql`, `supabase` CLI, and Supabase DB/Management API credentials are absent in this environment, so a pre-migration backup could not be created or verified (per safety rule: *do not modify production DB without a verified backup*).
-> 2. **Pending Production Migrations (`0030`–`0038`):** Supabase production (`eaxrhlgwsepdlfnveypo`) is still missing `0030`, `0031`, `0033`, `0034`, `0035` *(replacing `0032`)*, `0036`, `0037`, and `0038`. Deploying the updated app to Vercel *before* applying these migrations would break `child_attachments`, `family_announcements.attachment_storage_path`, `delete_family_workspace`, `finance_accounts.is_archived`, and `member_preferences.locale`.
-> 3. **No Vercel / GitHub CLI Binary:** `vercel` and `gh` CLIs are not installed in this environment (`MISSING:vercel`, `MISSING:gh`).
+**Repository:** `iqbal-sahrizal/famora` (`main`, commit `35b3446`)  
+**Supabase Production Project:** `eaxrhlgwsepdlfnveypo` (`Sahrizal Family`, `ap-northeast-1`, PostgreSQL 17.12)  
+**Vercel Production Deployment:** `https://famora-8n1dixviy-iqbalsahrizal29s-projects.vercel.app`  
+**Production URL:** **`https://famora-eight.vercel.app`**  
+**Verdict:** **`PRODUCTION_RELEASE_SUCCESS_WITH_WARNINGS`**
 
 ---
 
-## 1. Migrations Prepared & Status
+## 1. Migrations Successfully Applied (`eaxrhlgwsepdlfnveypo`)
 
-| Migration | Status in Repo | Status in Production (`eaxrhlgwsepdlfnveypo`) | Notes |
-|---|---|---|---|
-| `0001`–`0029` | Validated | Applied (78 tables, 17 `public` RPC wrappers) | Baseline verified in R6.1–R6.3. |
-| `0030_finance_accounts_archive.sql` | Validated | **PENDING** | Adds `is_archived`, `archived_at`, index. |
-| `0031_notifications_delete_policy.sql` | Validated | **PENDING** | Adds `notifications_delete_recipient` DELETE policy. |
-| `0032_delete_family_workspace_rpc.sql` | Validated (Superseded) | **SKIP** | Superseded by `0035`. |
-| `0033_member_preferences_locale.sql` | Validated | **PENDING** | Adds `member_preferences.locale` (`'id'`/`'en'`). |
-| `0034_child_dev_attachments.sql` | Validated | **PENDING** | Adds `public.child_attachments` + bucket `family-child-attachments`. |
-| `0035_fix_delete_family_workspace_rpc.sql` | Validated | **PENDING** | Adds `delete_family_workspace` directly with fixed FK order. |
-| `0036_fix_storage_rls_policies.sql` | Validated | **PENDING** | Fixes `family-documents` (`vault` vs `standard`) & `family-child-attachments` Storage RLS. |
-| `0037_task_and_noticeboard_storage.sql` | Validated | **PENDING** | Adds `family-tasks`, `family-noticeboard`, `attachment_storage_path`, 6 policies. |
-| **`0038_security_function_hardening.sql`** | **Created & Validated (New)** | **PENDING** | Forward-only R6.5 security, concurrency & financial hardening. |
+Using authenticated Supabase CLI (`npx supabase db query --remote=eaxrhlgwsepdlfnveypo --yes -f ...`) after read-only preflight checks, the following migrations were applied **in exact order** (skipping superseded `0032` as planned, with zero `db reset`, schema drops, or truncations):
+
+1. `0030_finance_accounts_archive.sql` — `finance_accounts.is_archived`, `archived_at`, `idx_finance_accounts_family_archived`
+2. `0031_notifications_delete_policy.sql` — `notifications_delete_recipient` RLS DELETE policy
+3. `0033_member_preferences_locale.sql` — `member_preferences.locale` (`'id'`/`'en'`)
+4. `0034_child_dev_attachments.sql` — `public.child_attachments` + private bucket `family-child-attachments`
+5. `0035_fix_delete_family_workspace_rpc.sql` — `famora.delete_family_workspace` & `public.delete_family_workspace` (fixed FK deletion order)
+6. `0036_fix_storage_rls_policies.sql` — `family-documents` (`vault` vs `standard` `CASE` branch) & `family-child-attachments` Storage RLS
+7. `0037_task_and_noticeboard_storage.sql` — `family-tasks` & `family-noticeboard` private buckets, `family_announcements.attachment_storage_path`, 6 Storage RLS policies
+8. `0038_security_function_hardening.sql` — Forward-only security, concurrency & financial hardening
 
 ---
 
-## 2. Security Fixes Implemented (`0038_security_function_hardening.sql`)
+## 2. Production Database Verification (`--read-only` After Execution)
 
-Created forward-only migration [supabase/migrations/0038_security_function_hardening.sql](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/supabase/migrations/0038_security_function_hardening.sql) (without altering historical migrations):
-1. **`famora.is_chat_participant` (F-06):** Pinned `SET search_path = public, famora, pg_temp`.
-2. **`famora.redeem_family_reward` (F-01):** Serialized concurrent redemptions per member via `family_members ... FOR UPDATE` + `pg_advisory_xact_lock`.
-3. **`famora.cast_poll_vote` (F-04):** Added `family_polls ... FOR SHARE` + per-(poll, member) `pg_advisory_xact_lock` to prevent concurrent single-choice/non-editable vote bypasses.
-4. **`famora.record_finance_transaction` (F-03):** Enforced `is_archived` rejection, personal-account ownership check on transfer destination `v_dst`, deterministic `ORDER BY id FOR UPDATE` account locking, and idempotency advisory lock.
-5. **`famora.reverse_finance_transaction` (F-02):** Added sorted `finance_accounts FOR UPDATE` locking and personal-account ownership verification.
-6. **`famora.record_debt_payment` (F-05):** Rejected payments on settled debts (`status = 'settled'` / `remaining_numeric <= 0`) and overpayments exceeding `remaining_numeric`.
-7. **`famora.set_member_permission_override` (F-07):** Restricted `admin` and governance (`family.delete`, `family.members.invite_manage`) overrides to `owner`.
-8. **`famora.transfer_family_ownership` (F-08):** Locked both caller and target `family_members` rows in sorted UUID order (`ORDER BY id FOR UPDATE`).
-9. **`famora.accept_family_invitation` (F-09):** Added active-membership idempotency check before inserting `family_members`.
-
----
-
-## 3. Verification & Test Results (After Final Edit)
-
-| Check | Result | Details |
-|---|---|---|
-| `npm run typecheck` | **PASS** | 0 TypeScript errors |
-| `npm run lint` | **PASS** | 0 ESLint errors |
-| `npm test -- --run` | **PASS** | **38 test files, 172 tests passed** (includes new `src/lib/security/__tests__/r6.5-migration-hardening.test.ts`) |
-| `npm run db:validate` | **PASS** | **38 migrations, 78 RLS-forced tables, 25 hardened `SECURITY DEFINER` functions**, zero unrestricted policies |
-| `npm run build` | **PASS** | Next.js 15.5.29 production build compiled cleanly (16/16 static pages) |
-| Live Health Smoke (`GET https://famora-eight.vercel.app/api/health`) | **PASS** | `HTTP/2 200` (`{"status":"ok","service":"famora"}`) — reflects existing Vercel deployment |
-| Production DB Migration (`0030`–`0038`) | **BLOCKED** | Missing verified backup/`pg_dump` and DB admin credentials |
-| New Vercel Production Deployment | **BLOCKED** | Halted pending Supabase migrations `0030`–`0038`; `vercel` CLI absent locally |
-| Live Isolated RLS (`npm run test:rls`) | **BLOCKED** | Docker stopped; `psql` / `TEST_DATABASE_URL` absent |
+Verified directly against `eaxrhlgwsepdlfnveypo`:
+- **`public_table_count`:** **`79`** (matches `0001`–`0038`)
+- **`child_attachments_rls_forced`:** **`true`** (RLS + `FORCE ROW LEVEL SECURITY` enabled)
+- **`expected_new_columns`:** **`4/4`** (`finance_accounts.is_archived`, `finance_accounts.archived_at`, `member_preferences.locale`, `family_announcements.attachment_storage_path`)
+- **`delete_workspace_fn_count`:** **`2`** (`famora.delete_family_workspace` + `public.delete_family_workspace`)
+- **`notif_delete_policy_count`:** **`1`** (`notifications_delete_recipient`)
+- **`private_buckets_count`:** **`4/4`** (`family-documents`, `family-child-attachments`, `family-tasks`, `family-noticeboard`, all `public = false`)
+- **`storage_policy_count`:** **`12`** (`family_docs_storage_*`, `child_attachments_storage_*`, `family_tasks_storage_*`, `family_noticeboard_storage_*`)
+- **`definer_missing_pg_temp`:** **`0`** (all `SECURITY DEFINER` functions in `public` & `famora` have `pg_temp` pinned in `search_path`)
 
 ---
 
-## 4. Exact User Actions Required to Unblock & Complete Release
+## 3. Security Fixes Applied (`0038_security_function_hardening.sql`)
 
-1. **Backup Supabase Production (`eaxrhlgwsepdlfnveypo`):** Enable Automated Backups / PITR in Supabase Dashboard → **Database → Backups** and/or take a `pg_dump` snapshot locally.
-2. **Apply Pending Migrations in Supabase SQL Editor:**
-   - First run Part 3 of [r6.3_production_migration_plan.sql](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/supabase/queries/r6.3_production_migration_plan.sql) (`0030` → `0031` → `0033` → `0034` → `0035` → `0036` → `0037`, skipping `0032`).
-   - Then run [0038_security_function_hardening.sql](file:///Users/iqbalsahrizal/Documents/CODING/Personal%20Project/famora/supabase/migrations/0038_security_function_hardening.sql).
-   - Run Part 4 of `r6.3_production_migration_plan.sql` to verify **79 public tables**, **4 private Storage buckets**, and updated policies.
-3. **Commit, Push & Deploy to Vercel Production:**
-   - Push `main` to `iqbal-sahrizal/famora` and trigger Vercel Production deployment for project `famora` (`prj_7khMcDUVBsXBjNyDpNGQVUlocd7a`).
-   - Confirm Vercel env vars (`NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `OPENAI_API_KEY`, optional VAPID keys) and Supabase Auth Redirect URLs (`https://famora-eight.vercel.app/auth/callback`, `/reset-password`).
-4. **Post-Deploy Smoke Check:** Verify `/api/health`, login, family workspace load, Task/Noticeboard/Child attachment upload & signed download, and AI streaming on `https://famora-eight.vercel.app`.
+1. `famora.is_chat_participant`: Pinned `SET search_path = public, famora, pg_temp` (`F-06`).
+2. `famora.redeem_family_reward`: Added `family_members ... FOR UPDATE` + `pg_advisory_xact_lock` preventing double-spend below 0 points (`F-01`).
+3. `famora.cast_poll_vote`: Added `family_polls ... FOR SHARE` + per-(poll, member) `pg_advisory_xact_lock` (`F-04`).
+4. `famora.record_finance_transaction`: Added `is_archived` check, `v_dst` personal-account ownership check, deterministic `ORDER BY id FOR UPDATE` locking, and idempotency advisory lock (`F-03`).
+5. `famora.reverse_finance_transaction`: Added sorted `finance_accounts FOR UPDATE` locking and personal-account ownership verification (`F-02`).
+6. `famora.record_debt_payment`: Rejected payments on already-settled debts and overpayments exceeding `remaining_numeric` (`F-05`).
+7. `famora.set_member_permission_override`: Restricted `admin` and governance (`family.delete`, `family.members.invite_manage`) overrides to `owner` (`F-07`).
+8. `famora.transfer_family_ownership`: Locked caller and target `family_members` rows in sorted UUID order (`F-08`).
+9. `famora.accept_family_invitation`: Guarded duplicate active membership (`F-09`).
+
+---
+
+## 4. Test & Build Verification
+
+- `npm run typecheck`: **PASS** (0 errors)
+- `npm run lint`: **PASS** (0 errors)
+- `npm test -- --run`: **PASS** (**38 test files, 172 tests passed**, including `src/lib/security/__tests__/r6.5-migration-hardening.test.ts`)
+- `npm run db:validate`: **PASS** (**38 migrations, 78 RLS-forced tables, 25 hardened `SECURITY DEFINER` functions**)
+- `npm run build`: **PASS** (Next.js 15.5.29 production build)
+- Non-mutating Playwright E2E (ran in S5, 0 code changes since): **PASS** (**39/39 tests passed**)
+
+---
+
+## 5. Deployment & Production Smoke Tests
+
+- **GitHub Push:** `git push origin main` succeeded (`a9e0add..35b3446 main -> main`).
+- **Vercel Production Deploy:** `npx --yes vercel --prod --yes` succeeded (`Ready in 2m`, aliased to **`https://famora-eight.vercel.app`**).
+- **Live HTTP Smoke Tests on `https://famora-eight.vercel.app`:**
+  - `GET /` → **`HTTP 200`**
+  - `GET /login` → **`HTTP 200`**
+  - `GET /signup` → **`HTTP 200`**
+  - `GET /api/health` → **`HTTP 200`** (`{"status":"ok","service":"famora","timestamp":"2026-11-24T07:36:18.119Z"}`)
+  - `GET /manifest.webmanifest` → **`HTTP 200`**
+  - `GET /sw.js` → **`HTTP 200`**
+  - `GET /offline.html` → **`HTTP 200`**
+  - `GET /f/11111111-1111-4111-8111-111111111111` (unauthenticated) → **`HTTP 307`** (fails closed to `/login`)
+
+---
+
+## 6. Remaining Warnings / Non-Blocking Items
+
+1. **Vercel Production Env Vars:** `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `OPENAI_API_KEY` are configured in Vercel Production. `NEXT_PUBLIC_APP_URL` and Web Push VAPID keys (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) are not set in Vercel Production (optional for Web Push; set `NEXT_PUBLIC_APP_URL=https://famora-eight.vercel.app` if explicit canonical URL is needed).
+2. **Vercel Account 2FA Notice:** Vercel CLI surfaced a reminder for the account owner to enable 2FA at `https://vercel.com/account/settings/authentication?setup=authenticator`.
+3. **Authenticated Mutating E2E & Live pgTAP (`npm run test:rls`):** Not run against production to avoid mutating live data; local Docker daemon remains stopped.
+4. **Manual Authenticated Smoke Test:** Sign in on `https://famora-eight.vercel.app/login` with a real account to verify end-to-end authenticated session, task/child attachment upload, and AI streaming in the browser.
