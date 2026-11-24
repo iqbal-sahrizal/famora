@@ -208,16 +208,26 @@ export async function addShoppingItemAction(
       client_mutation_id: parsed.data.clientMutationId ?? null,
     };
 
-    const { error } = parsed.data.clientMutationId
-      ? await supabase
-          .from("shopping_items")
-          .upsert(payload, {
-            onConflict: "family_id,client_mutation_id",
-            ignoreDuplicates: true,
-          })
-      : await supabase.from("shopping_items").insert(payload);
+    if (parsed.data.clientMutationId) {
+      const { data: existingItem } = await supabase
+        .from("shopping_items")
+        .select("id")
+        .eq("family_id", parsed.data.familyId)
+        .eq("client_mutation_id", parsed.data.clientMutationId)
+        .maybeSingle<{ id: string }>();
 
-    if (error) return { ok: false, error: error.message };
+      if (existingItem) {
+        revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
+        revalidatePath(routes.familyDashboard(parsed.data.familyId));
+        return { ok: true };
+      }
+    }
+
+    const { error } = await supabase.from("shopping_items").insert(payload);
+
+    if (error && error.code !== "23505") {
+      return { ok: false, error: error.message };
+    }
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
     revalidatePath(routes.familyDashboard(parsed.data.familyId));

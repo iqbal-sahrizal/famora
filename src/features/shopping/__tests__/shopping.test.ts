@@ -78,6 +78,13 @@ vi.mock("@/lib/supabase/server", () => ({
       }
       if (table === "shopping_items") {
         return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+              }),
+            }),
+          }),
           upsert: vi.fn(async (payload: Record<string, unknown>) => {
             upsertedItems.push(payload);
             return { error: null };
@@ -177,8 +184,8 @@ describe("Famora Shopping Lists — Collaboration, Idempotency & Offline Queue",
     });
 
     expect(res.ok).toBe(true);
-    expect(upsertedItems).toHaveLength(1);
-    expect(upsertedItems[0].client_mutation_id).toBe("mut-12345678");
+    expect(insertedItems).toHaveLength(1);
+    expect(insertedItems[0].client_mutation_id).toBe("mut-12345678");
   });
 
   it("records checked-off items into shopping_item_history", async () => {

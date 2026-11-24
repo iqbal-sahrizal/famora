@@ -264,6 +264,23 @@ export async function getChatPageData(
         );
     }
 
+    if (canParticipateAdultsOnly) {
+      const adultsGroups = convRows.filter((c) => c.kind === "adults_group");
+      for (const ag of adultsGroups) {
+        await supabase
+          .from("chat_participants")
+          .upsert(
+            {
+              family_id: familyId,
+              conversation_id: ag.id,
+              member_id: currentMember.id,
+              role: "member",
+            },
+            { onConflict: "conversation_id,member_id", ignoreDuplicates: true }
+          );
+      }
+    }
+
     const visibleConvs = convRows.filter(
       (c) => c.kind !== "adults_group" || canParticipateAdultsOnly
     );

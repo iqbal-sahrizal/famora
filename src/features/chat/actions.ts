@@ -55,6 +55,25 @@ async function requireChatAccess(familyId: string, conversationId: string) {
     return { ok: false as const, error: "Conversation not found or access denied." };
   }
 
+  // Auto-enroll active eligible members into shared family_group / adults_group rooms
+  const canAutoJoinRoom =
+    (conv.kind === "family_group" && permSet.has("chat.family.participate")) ||
+    (conv.kind === "adults_group" &&
+      permSet.has("chat.family.participate") &&
+      permSet.has("chat.adults_only.participate"));
+
+  if (canAutoJoinRoom && !participantIds.includes(actor.id)) {
+    const { error: joinErr } = await supabase.from("chat_participants").insert({
+      family_id: familyId,
+      conversation_id: conversationId,
+      member_id: actor.id,
+      role: "member",
+    });
+    if (!joinErr || joinErr.code === "23505") {
+      participantIds.push(actor.id);
+    }
+  }
+
   const allowed = canAccessConversation({
     conversationKind: conv.kind,
     participantMemberIds: participantIds,
