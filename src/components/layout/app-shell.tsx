@@ -132,16 +132,27 @@ export function AppShell({
           sidebarCollapsed ? "lg:w-[80px]" : "lg:w-[264px]"
         )}
       >
-        <div className="flex items-center justify-between px-4 py-4 border-b border-[var(--border-subtle)]">
+        <div
+          className={cn(
+            "flex items-center border-b border-[var(--border-subtle)]",
+            sidebarCollapsed
+              ? "flex-col gap-2 px-2 py-3"
+              : "justify-between gap-2 px-4 py-4"
+          )}
+        >
           <Link
             href={routes.familyDashboard(familyId)}
-            className="flex items-center gap-3 overflow-hidden"
+            title={sidebarCollapsed ? `Senvamily — ${familyLabel}` : undefined}
+            className={cn(
+              "flex items-center gap-3",
+              sidebarCollapsed ? "justify-center" : "min-w-0 flex-1 overflow-hidden"
+            )}
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-[var(--accent-primary-fg)]">
               <HeartHandshake className="h-5 w-5" strokeWidth={1.75} />
             </div>
             {!sidebarCollapsed && (
-              <div className="truncate">
+              <div className="min-w-0 truncate">
                 <p className="font-heading text-[16px] font-bold leading-tight">
                   Senvamily
                 </p>
@@ -155,7 +166,7 @@ export function AppShell({
             type="button"
             onClick={toggleSidebar}
             aria-label={sidebarCollapsed ? t("shell.expandSidebar") : t("shell.collapseSidebar")}
-            className="rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+            className="shrink-0 rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
           >
             {sidebarCollapsed ? (
               <ChevronRight className="h-4 w-4" />
