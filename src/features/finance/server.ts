@@ -9,6 +9,7 @@ export interface FinanceAccountItem {
   ownershipScope: "family" | "personal";
   currencyCode: string;
   balanceNumeric: string;
+  expenseNumeric?: string;
   monthlyBudgetNumeric: string;
   isArchived: boolean;
 }
@@ -99,10 +100,10 @@ export async function getFinancePageData(familyId: string): Promise<FinancePageD
           .eq("family_id", familyId)
           .order("occurred_on", { ascending: false })
           .order("created_at", { ascending: false })
-          .limit(60),
+          .limit(200),
         supabase
           .from("finance_transactions")
-          .select("kind, amount_numeric, is_reversed")
+          .select("account_id, kind, amount_numeric, is_reversed")
           .eq("family_id", familyId),
         supabase
           .from("finance_audit_history")
@@ -118,6 +119,20 @@ export async function getFinancePageData(familyId: string): Promise<FinancePageD
       )
     );
 
+    const activeTotalsSource = (allTxTotals ?? []) as Array<{
+      account_id?: string | null;
+      kind: string;
+      amount_numeric: string | number;
+      is_reversed?: boolean;
+    }>;
+    const expenseByAccMap = new Map<string, string[]>();
+    for (const row of activeTotalsSource) {
+      if (row.kind !== "expense" || row.is_reversed || !row.account_id) continue;
+      const list = expenseByAccMap.get(row.account_id) ?? [];
+      list.push(String(row.amount_numeric ?? "0.00"));
+      expenseByAccMap.set(row.account_id, list);
+    }
+
     const accounts: FinanceAccountItem[] = (accData ?? []).map((a) => ({
       id: a.id,
       name: a.name,
@@ -125,6 +140,7 @@ export async function getFinancePageData(familyId: string): Promise<FinancePageD
       ownershipScope: a.ownership_scope,
       currencyCode: a.currency_code,
       balanceNumeric: String(a.balance_numeric ?? "0.00"),
+      expenseNumeric: sumDecimalStrings(expenseByAccMap.get(a.id) ?? []),
       monthlyBudgetNumeric: String(a.monthly_budget_numeric ?? "0.00"),
       isArchived: Boolean((a as { is_archived?: boolean }).is_archived),
     }));
@@ -149,11 +165,6 @@ export async function getFinancePageData(familyId: string): Promise<FinancePageD
     const totalBalanceNumeric = sumDecimalStrings(
       accounts.filter((a) => !a.isArchived).map((a) => a.balanceNumeric)
     );
-    const activeTotalsSource = (allTxTotals ?? []) as Array<{
-      kind: string;
-      amount_numeric: string | number;
-      is_reversed?: boolean;
-    }>;
     const totalIncomeNumeric = sumDecimalStrings(
       activeTotalsSource
         .filter((t) => t.kind === "income" && !t.is_reversed)

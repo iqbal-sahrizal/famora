@@ -85,8 +85,10 @@ export function FamilyShoppingView({
   const [quickName, setQuickName] = React.useState("");
   const [quickCategory, setQuickCategory] = React.useState("Groceries");
   const [quickQty, setQuickQty] = React.useState("1");
+  const [quickUnit, setQuickUnit] = React.useState("pcs");
   const [quickPrice, setQuickPrice] = React.useState("");
   const [quickShopper, setQuickShopper] = React.useState("");
+  const [addItemOpen, setAddItemOpen] = React.useState(false);
   const financeAccounts = React.useMemo(
     () => effectiveData.financeAccounts ?? [],
     [effectiveData.financeAccounts]
@@ -205,7 +207,7 @@ export function FamilyShoppingView({
         name: quickName.trim(),
         category: quickCategory,
         quantity: quickQty || "1",
-        unit: "pcs",
+        unit: quickUnit || "pcs",
         estimatedPriceCents: quickPriceCents,
         notes: "",
         assignedShopperMemberId: quickShopper || null,
@@ -221,7 +223,7 @@ export function FamilyShoppingView({
           name: quickName.trim(),
           category: quickCategory,
           quantity: quickQty || "1",
-          unit: "pcs",
+          unit: quickUnit || "pcs",
           estimatedPriceCents: quickPriceCents,
           notes: "",
           isChecked: false,
@@ -233,6 +235,7 @@ export function FamilyShoppingView({
       ]);
       setQuickName("");
       setQuickPrice("");
+      setAddItemOpen(false);
       toast.info(t("shopping.toast.offlineAdd"));
       return;
     }
@@ -244,7 +247,7 @@ export function FamilyShoppingView({
       name: quickName.trim(),
       category: quickCategory,
       quantity: quickQty || "1",
-      unit: "pcs",
+      unit: quickUnit || "pcs",
       estimatedPriceCents: quickPriceCents,
       notes: "",
       assignedShopperMemberId: quickShopper || null,
@@ -256,6 +259,7 @@ export function FamilyShoppingView({
     else {
       setQuickName("");
       setQuickPrice("");
+      setAddItemOpen(false);
       router.refresh();
     }
   };
@@ -488,6 +492,27 @@ export function FamilyShoppingView({
     return found ? found.label : cat;
   };
 
+  const shoppingUnitOptions = React.useMemo(() => {
+    const base = [
+      { value: "pcs", label: "pcs" },
+      { value: "kg", label: "kg" },
+      { value: "g", label: "g" },
+      { value: "liter", label: "liter" },
+      { value: "ml", label: "ml" },
+      { value: "pack", label: "pack" },
+      { value: "box", label: "box" },
+      { value: "botol", label: "botol" },
+      { value: "ikat", label: "ikat" },
+    ];
+    for (const u of [quickUnit, editItemUnit]) {
+      const trimmed = u.trim();
+      if (trimmed && !base.some((o) => o.value.toLowerCase() === trimmed.toLowerCase())) {
+        base.push({ value: trimmed, label: trimmed });
+      }
+    }
+    return base;
+  }, [quickUnit, editItemUnit]);
+
   const selectedFinanceAccountName =
     financeAccounts.find((a) => a.id === selectedFinanceAccountId)?.name ?? "";
 
@@ -516,10 +541,16 @@ export function FamilyShoppingView({
         }
         actions={
           data.canManage ? (
-            <Button variant="secondary" size="sm" onClick={() => setNewListOpen(true)}>
-              <Plus className="h-4 w-4" />
-              {t("shopping.newList")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setNewListOpen(true)}>
+                <Plus className="h-4 w-4" />
+                {t("shopping.newList")}
+              </Button>
+              <Button size="sm" onClick={() => setAddItemOpen(true)}>
+                <Plus className="h-4 w-4" />
+                {t("shopping.addItemTitle")}
+              </Button>
+            </div>
           ) : undefined
         }
       />
@@ -617,109 +648,112 @@ export function FamilyShoppingView({
         </div>
       )}
 
-      {/* Add Shopping Item Form */}
-      {data.canManage && (
-        <Card className="p-4 sm:p-5">
-          <form onSubmit={handleQuickAdd} className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-heading text-[15px] font-semibold">
-                {t("shopping.addItemTitle")}
-              </h2>
-              {selectedFinanceAccountName ? (
-                <p className="text-[12px] text-[var(--text-secondary)]">
-                  {t("shopping.financeAccountHint", { account: selectedFinanceAccountName })}
-                </p>
-              ) : (
-                <p className="text-[12px] text-[var(--text-muted)]">
-                  {t("shopping.noFinanceAccountHint")}
-                </p>
-              )}
-            </div>
+      {/* Add Shopping Item Popup */}
+      <BottomSheet
+        open={addItemOpen}
+        onClose={() => !busy && setAddItemOpen(false)}
+        title={t("shopping.addItemTitle")}
+      >
+        <form onSubmit={handleQuickAdd} className="space-y-4">
+          {selectedFinanceAccountName ? (
+            <p className="rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-[12px] text-[var(--text-secondary)]">
+              {t("shopping.financeAccountHint", { account: selectedFinanceAccountName })}
+            </p>
+          ) : (
+            <p className="rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
+              {t("shopping.noFinanceAccountHint")}
+            </p>
+          )}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                label={t("shopping.itemNameLabel")}
-                required
-                placeholder={t("shopping.quickAddPlaceholder")}
-                value={quickName}
-                onChange={(e) => setQuickName(e.target.value)}
-              />
-              <Select
-                label={t("shopping.categoryLabel")}
-                aria-label={t("shopping.categoryAria")}
-                value={quickCategory}
-                onChange={(e) => setQuickCategory(e.target.value)}
-                options={shoppingCategoryOptions}
-              />
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label={t("shopping.itemNameLabel")}
+              required
+              placeholder={t("shopping.quickAddPlaceholder")}
+              value={quickName}
+              onChange={(e) => setQuickName(e.target.value)}
+            />
+            <Select
+              label={t("shopping.categoryLabel")}
+              aria-label={t("shopping.categoryAria")}
+              value={quickCategory}
+              onChange={(e) => setQuickCategory(e.target.value)}
+              options={shoppingCategoryOptions}
+            />
+          </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Input
-                label={t("shopping.qtyAria")}
-                aria-label={t("shopping.qtyAria")}
-                placeholder={t("shopping.qtyPlaceholder")}
-                value={quickQty}
-                onChange={(e) => setQuickQty(e.target.value)}
-              />
-              <Input
-                label={t("shopping.priceOptionalLabel")}
-                aria-label={t("shopping.priceOptionalLabel")}
-                type="text"
-                inputMode="decimal"
-                placeholder="0"
-                leadingIcon={
-                  <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
-                    {currencyPrefix}
-                  </span>
-                }
-                value={quickPrice}
-                onChange={(e) =>
-                  setQuickPrice(
-                    formatCurrencyInputWithSeparators(
-                      e.target.value,
-                      effectiveData.currencyCode
-                    )
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label={t("shopping.qtyAria")}
+              aria-label={t("shopping.qtyAria")}
+              placeholder={t("shopping.qtyPlaceholder")}
+              value={quickQty}
+              onChange={(e) => setQuickQty(e.target.value)}
+            />
+            <Select
+              label={t("shopping.unitLabel")}
+              value={quickUnit}
+              onChange={(e) => setQuickUnit(e.target.value)}
+              options={shoppingUnitOptions}
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label={t("shopping.priceOptionalLabel")}
+              aria-label={t("shopping.priceOptionalLabel")}
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              leadingIcon={
+                <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
+                  {currencyPrefix}
+                </span>
+              }
+              value={quickPrice}
+              onChange={(e) =>
+                setQuickPrice(
+                  formatCurrencyInputWithSeparators(
+                    e.target.value,
+                    effectiveData.currencyCode
                   )
-                }
-                className="tabular-nums"
-              />
-              <Select
-                label={t("shopping.assigneeAria")}
-                aria-label={t("shopping.assigneeAria")}
-                value={quickShopper}
-                onChange={(e) => setQuickShopper(e.target.value)}
-                options={[
-                  { value: "", label: t("shopping.anyShopper") },
-                  ...data.members.map((m) => ({
-                    value: m.id,
-                    label: m.displayName,
-                  })),
-                ]}
-              />
-            </div>
+                )
+              }
+              className="tabular-nums"
+            />
+            <Select
+              label={t("shopping.assigneeAria")}
+              aria-label={t("shopping.assigneeAria")}
+              value={quickShopper}
+              onChange={(e) => setQuickShopper(e.target.value)}
+              options={[
+                { value: "", label: t("shopping.anyShopper") },
+                ...data.members.map((m) => ({
+                  value: m.id,
+                  label: m.displayName,
+                })),
+              ]}
+            />
+          </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              {financeAccounts.length > 0 && (
-                <div className="sm:min-w-[260px] sm:flex-1">
-                  <Select
-                    label={t("shopping.financeAccountLabel")}
-                    value={selectedFinanceAccountId}
-                    onChange={(e) => setSelectedFinanceAccountId(e.target.value)}
-                    options={financeAccounts.map((a) => ({
-                      value: a.id,
-                      label: a.name,
-                    }))}
-                  />
-                </div>
-              )}
-              <Button type="submit" isLoading={busy} className="sm:shrink-0">
-                <Plus className="h-4 w-4" />
-                {t("common.add")}
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
+          {financeAccounts.length > 0 && (
+            <Select
+              label={t("shopping.financeAccountLabel")}
+              value={selectedFinanceAccountId}
+              onChange={(e) => setSelectedFinanceAccountId(e.target.value)}
+              options={financeAccounts.map((a) => ({
+                value: a.id,
+                label: a.name,
+              }))}
+            />
+          )}
+
+          <Button type="submit" className="w-full" isLoading={busy}>
+            <Plus className="h-4 w-4" />
+            {t("common.add")}
+          </Button>
+        </form>
+      </BottomSheet>
 
       {/* Shopping Items */}
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
@@ -1048,10 +1082,11 @@ export function FamilyShoppingView({
               value={editItemQty}
               onChange={(e) => setEditItemQty(e.target.value)}
             />
-            <Input
+            <Select
               label={t("shopping.unitLabel")}
               value={editItemUnit}
               onChange={(e) => setEditItemUnit(e.target.value)}
+              options={shoppingUnitOptions}
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1088,6 +1123,17 @@ export function FamilyShoppingView({
             value={editItemNotes}
             onChange={(e) => setEditItemNotes(e.target.value)}
           />
+          {financeAccounts.length > 0 && (
+            <Select
+              label={t("shopping.financeAccountLabel")}
+              value={selectedFinanceAccountId}
+              onChange={(e) => setSelectedFinanceAccountId(e.target.value)}
+              options={financeAccounts.map((a) => ({
+                value: a.id,
+                label: a.name,
+              }))}
+            />
+          )}
           <div className="flex flex-wrap gap-2 pt-1">
             <Button type="submit" className="flex-1" isLoading={busy}>
               {t("shopping.saveItemBtn")}

@@ -384,7 +384,8 @@ export function FamilyFinanceView({
             <div className="space-y-2.5">
               {activeAccounts.map((acc) => {
                 const accountExpenseMinor = expenseByAccountId.get(acc.id) ?? 0n;
-                const accountExpenseNumeric = minorUnitsToDecimalString(accountExpenseMinor);
+                const accountExpenseNumeric =
+                  acc.expenseNumeric ?? minorUnitsToDecimalString(accountExpenseMinor);
                 return (
                   <div
                     key={acc.id}
