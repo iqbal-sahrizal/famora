@@ -317,6 +317,42 @@ export async function toggleShoppingCheckAction(
         },
         { onConflict: "family_id,item_name" }
       );
+
+      // Sync purchased shopping item with price into Finance expenses (idempotent per itemId)
+      if (Number(item.estimated_price_cents) > 0) {
+        try {
+          const { data: account } = await supabase
+            .from("finance_accounts")
+            .select("id")
+            .eq("family_id", parsed.data.familyId)
+            .eq("is_archived", false)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle<{ id: string }>();
+
+          if (account?.id) {
+            const amount = Number((Number(item.estimated_price_cents) / 100).toFixed(2));
+            await supabase.rpc("record_finance_transaction", {
+              p_family_id: parsed.data.familyId,
+              p_account_id: account.id,
+              p_kind: "expense",
+              p_amount: amount,
+              p_merchant: item.name,
+              p_category: item.category || "Shopping",
+              p_occurred_on: new Date().toISOString().slice(0, 10),
+              p_notes: `Belanja Keluarga (${item.quantity} ${item.unit})`,
+              p_transfer_account_id: null,
+              p_attachment_name: null,
+              p_idempotency_key: `shopping-purchase:${parsed.data.itemId}`,
+            });
+            revalidatePath(routes.familyDomain(parsed.data.familyId, "finance"));
+            revalidatePath(routes.familyDomain(parsed.data.familyId, "budgets"));
+            revalidatePath(routes.familyDomain(parsed.data.familyId, "analytics"));
+          }
+        } catch {
+          // Non-blocking: shopping check still succeeds if user lacks finance permissions or accounts
+        }
+      }
     }
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
