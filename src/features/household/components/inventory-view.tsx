@@ -9,7 +9,6 @@ import {
   Package,
   Pencil,
   Plus,
-  ShoppingCart,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,7 +27,6 @@ import {
   adjustInventoryAction,
   createInventoryItemAction,
   deleteInventoryItemAction,
-  restockToShoppingAction,
   updateInventoryItemAction,
 } from "../actions";
 import type { getInventoryPageData } from "../server";
@@ -50,15 +48,33 @@ export function InventoryView({
 
   const [name, setName] = React.useState("");
   const [itemCat, setItemCat] = React.useState<"pantry" | "fridge" | "freezer" | "cleaning" | "medicine" | "supplies">("pantry");
-  const [qty, setQty] = React.useState("2");
-  const [unit, setUnit] = React.useState("pcs");
-  const [minThreshold, setMinThreshold] = React.useState("1");
+  const [qty, setQty] = React.useState("1");
+  const [unit, setUnit] = React.useState("unit");
+  const [minThreshold, setMinThreshold] = React.useState("0");
   const [expiresOn, setExpiresOn] = React.useState("");
 
-  const lowStockItems = data.items.filter((i) => i.quantity <= i.minThreshold);
+  const lowStockItems = data.items.filter(
+    (i) => i.minThreshold > 0 && i.quantity <= i.minThreshold
+  );
   const visibleItems = data.items.filter(
     (i) => category === "all" || i.category === category
   );
+
+  const assetUnitOptions = React.useMemo(() => {
+    const base = [
+      { value: "unit", label: "unit" },
+      { value: "buah", label: "buah" },
+      { value: "set", label: "set" },
+      { value: "pasang", label: "pasang" },
+      { value: "lembar", label: "lembar" },
+      { value: "bidang", label: "bidang" },
+      { value: "pcs", label: "pcs" },
+    ];
+    if (unit.trim() && !base.some((o) => o.value.toLowerCase() === unit.trim().toLowerCase())) {
+      base.push({ value: unit.trim(), label: unit.trim() });
+    }
+    return base;
+  }, [unit]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +111,19 @@ export function InventoryView({
         description={t("inv.desc")}
         actions={
           data.canManage ? (
-            <Button size="sm" onClick={() => setAddOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingItemId(null);
+                setName("");
+                setItemCat("pantry");
+                setQty("1");
+                setUnit("unit");
+                setMinThreshold("0");
+                setExpiresOn("");
+                setAddOpen(true);
+              }}
+            >
               <Plus className="h-4 w-4" />
               {t("inv.addItemBtn")}
             </Button>
@@ -150,7 +178,7 @@ export function InventoryView({
             />
           ) : (
             visibleItems.map((item) => {
-              const isLow = item.quantity <= item.minThreshold;
+              const isLow = item.minThreshold > 0 && item.quantity <= item.minThreshold;
               return (
                 <Card
                   key={item.id}
@@ -172,29 +200,13 @@ export function InventoryView({
                       )}
                     </div>
                     <p className="text-[12px] text-[var(--text-secondary)] tabular-nums">
-                      {t("inv.minThreshold", { min: item.minThreshold, unit: item.unit })}
+                      {t("inv.minThreshold", { min: item.quantity, unit: item.unit })}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-3 self-end sm:self-center">
                     {data.canManage && (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={async () => {
-                            const r = await restockToShoppingAction({
-                              familyId,
-                              itemName: item.name,
-                              unit: item.unit,
-                            });
-                            if (r.ok) toast.success(t("inv.restockToast", { name: item.name }));
-                            else toast.error(te(r.error));
-                          }}
-                        >
-                          <ShoppingCart className="h-3.5 w-3.5" />
-                          {t("inv.restockBtn")}
-                        </Button>
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
@@ -303,9 +315,9 @@ export function InventoryView({
           <Input label={t("inv.modal.itemName")} required placeholder={t("inv.modal.itemPlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">
             <Select label={t("inv.modal.location")} value={itemCat} onChange={(e) => setItemCat(e.target.value as typeof itemCat)} options={[{ value: "pantry", label: t("inv.cat.pantry") }, { value: "fridge", label: t("inv.cat.fridge") }, { value: "freezer", label: t("inv.cat.freezer") }, { value: "cleaning", label: t("inv.cat.cleaning") }, { value: "medicine", label: t("inv.cat.medicine") }, { value: "supplies", label: t("inv.cat.supplies") }]} />
-            <Input label={t("inv.modal.unit")} value={unit} onChange={(e) => setUnit(e.target.value)} />
-            <Input label={t("inv.modal.quantity")} type="number" step="0.5" value={qty} onChange={(e) => setQty(e.target.value)} />
-            <Input label={t("inv.modal.lowStockAt")} type="number" step="0.5" value={minThreshold} onChange={(e) => setMinThreshold(e.target.value)} />
+            <Select label={t("inv.modal.unit")} value={unit} onChange={(e) => setUnit(e.target.value)} options={assetUnitOptions} />
+            <Input label={t("inv.modal.quantity")} type="number" step="1" value={qty} onChange={(e) => setQty(e.target.value)} />
+            <Input label={t("inv.modal.lowStockAt")} type="number" step="1" value={minThreshold} onChange={(e) => setMinThreshold(e.target.value)} />
           </div>
           <Input label={t("inv.modal.expiresOn")} type="date" value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} />
           <Button type="submit" className="w-full" isLoading={busy}>{t("inv.modal.saveItem")}</Button>
