@@ -25,7 +25,7 @@ import { ThemeToggle } from "@/components/ui/navigation";
 import { logoutAction } from "@/features/auth/actions";
 import type { WorkspaceShellContext } from "@/features/workspace/server";
 import { useActiveFamilyId } from "@/hooks/use-active-family";
-import { clearOfflineCache } from "@/lib/pwa/indexeddb";
+import { clearAllPwaStorage } from "@/lib/pwa/indexeddb";
 import { translateDomainLabel, translateNavGroup, type Locale } from "@/lib/i18n";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -100,7 +100,7 @@ export function AppShell({
       toast.error(te(res.error, "shell.signOutError"));
       return;
     }
-    await clearOfflineCache().catch(() => undefined);
+    await clearAllPwaStorage().catch(() => undefined);
     setActiveFamilyId(null);
     setLogoutOpen(false);
     router.push(routes.login);

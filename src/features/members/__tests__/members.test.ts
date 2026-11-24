@@ -18,6 +18,11 @@ const insertedInvites: Array<Record<string, unknown>> = [];
 const updatedInvites: Array<Record<string, unknown>> = [];
 const mockRpc = vi.fn();
 
+let mockUpdateResult: { data: { id: string } | null; error: null } = {
+  data: { id: "row-1" },
+  error: null,
+};
+
 const mockFrom = vi.fn((table: string): Record<string, unknown> => {
   if (table === "family_members") {
     return {
@@ -32,7 +37,11 @@ const mockFrom = vi.fn((table: string): Record<string, unknown> => {
       }),
       update: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({ error: null }),
+          eq: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn(async () => mockUpdateResult),
+            }),
+          }),
         }),
       }),
     };
@@ -68,9 +77,12 @@ const mockFrom = vi.fn((table: string): Record<string, unknown> => {
         return {
           eq: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockResolvedValue({ error: null }),
+              eq: vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn(async () => mockUpdateResult),
+                }),
+              }),
             }),
-            then: (resolve: (v: { error: null }) => void) => resolve({ error: null }),
           }),
         };
       }),
@@ -101,6 +113,7 @@ describe("Famora Family Members & Invitations", () => {
     vi.clearAllMocks();
     insertedInvites.length = 0;
     updatedInvites.length = 0;
+    mockUpdateResult = { data: { id: "row-1" }, error: null };
   });
 
   it("stores SHA-256 token_hash rather than plaintext token when inviting", async () => {
@@ -174,5 +187,27 @@ describe("Famora Family Members & Invitations", () => {
       memberId: MEM_ID,
     });
     expect(res.ok).toBe(true);
+  });
+
+  it("BUG-004: returns ok: false when 0 rows match or RLS blocks mutation", async () => {
+    mockUpdateResult = { data: null, error: null };
+
+    const resendRes = await resendInvitationAction({
+      familyId: FAM_ID,
+      invitationId: INV_ID,
+    });
+    expect(resendRes.ok).toBe(false);
+
+    const revokeRes = await revokeInvitationAction({
+      familyId: FAM_ID,
+      invitationId: INV_ID,
+    });
+    expect(revokeRes.ok).toBe(false);
+
+    const removeRes = await removeMemberAction({
+      familyId: FAM_ID,
+      memberId: MEM_ID,
+    });
+    expect(removeRes.ok).toBe(false);
   });
 });

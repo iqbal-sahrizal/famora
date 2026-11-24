@@ -110,6 +110,7 @@ export async function enqueueFamilyNotification(params: {
 export async function processPushOutboxItem(params: {
   familyId: string;
   outboxId: string;
+  expectedRecipientMemberId?: string;
 }): Promise<{ ok: boolean; status: string; error?: string }> {
   const supabase = await createSupabaseServerClient();
 
@@ -135,6 +136,17 @@ export async function processPushOutboxItem(params: {
 
   if (!outbox || outbox.channel !== "push") {
     return { ok: false, status: "not_found", error: "Outbox item not found." };
+  }
+
+  if (
+    params.expectedRecipientMemberId &&
+    outbox.recipient_member_id !== params.expectedRecipientMemberId
+  ) {
+    return {
+      ok: false,
+      status: "forbidden",
+      error: "Not authorized to retry this notification.",
+    };
   }
 
   const [{ data: notif }, { data: prefRow }] = await Promise.all([
@@ -214,10 +226,16 @@ export async function processPushOutboxItem(params: {
       push_auth: string | null;
     }>) ?? [];
   if (activeDevices.length === 0) {
-    await supabase
-      .from("notifications")
-      .update({ push_status: "skipped" })
-      .eq("id", outbox.notification_id);
+    await Promise.all([
+      supabase
+        .from("notifications")
+        .update({ push_status: "skipped" })
+        .eq("id", outbox.notification_id),
+      supabase
+        .from("notification_outbox")
+        .update({ status: "suppressed", last_error: "No active push devices." })
+        .eq("id", outbox.id),
+    ]);
     return { ok: true, status: "no_active_devices" };
   }
 

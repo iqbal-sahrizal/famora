@@ -11,6 +11,12 @@ import {
   addHealthRecordSchema,
   addMilestoneSchema,
   createChildProfileSchema,
+  deleteChildRecordSchema,
+  updateChildProfileSchema,
+  updateEducationRecordSchema,
+  updateGrowthRecordSchema,
+  updateHealthRecordSchema,
+  updateMilestoneSchema,
   uploadChildAttachmentMetaSchema,
   validateChildAttachmentFile,
   type AddEducationRecordInput,
@@ -423,5 +429,376 @@ export async function deleteChildAttachmentAction(input: {
       ok: false,
       error: err instanceof Error ? err.message : "Failed to delete attachment.",
     };
+  }
+}
+
+export async function updateChildProfileAction(
+  input: z.infer<typeof updateChildProfileSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = updateChildProfileSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid child profile." };
+  }
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.manage"
+    );
+    if (!allowed) return { ok: false, error: "Missing permission: child_dev.manage" };
+
+    const { data, error } = await supabase
+      .from("child_profiles")
+      .update({
+        display_name: parsed.data.displayName,
+        birth_date: parsed.data.birthDate,
+        birth_place: parsed.data.birthPlace,
+        school_name: parsed.data.schoolName,
+        grade_level: parsed.data.gradeLevel,
+        teacher_name: parsed.data.teacherName,
+      })
+      .eq("id", parsed.data.profileId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Child profile not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update profile." };
+  }
+}
+
+export async function deleteChildProfileAction(
+  input: z.infer<typeof deleteChildRecordSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = deleteChildRecordSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.manage"
+    );
+    if (!allowed) return { ok: false, error: "Missing permission: child_dev.manage" };
+
+    const { data, error } = await supabase
+      .from("child_profiles")
+      .delete()
+      .eq("id", parsed.data.id)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Child profile not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete profile." };
+  }
+}
+
+export async function updateGrowthRecordAction(
+  input: z.infer<typeof updateGrowthRecordSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = updateGrowthRecordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid growth record." };
+  }
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.growth_milestones.manage"
+    );
+    if (!allowed) {
+      return { ok: false, error: "Missing permission: child_dev.growth_milestones.manage" };
+    }
+
+    const { data, error } = await supabase
+      .from("child_growth_records")
+      .update({
+        measured_on: parsed.data.measuredOn,
+        height_cm: parsed.data.heightCm,
+        weight_kg: parsed.data.weightKg,
+        notes: parsed.data.notes,
+      })
+      .eq("id", parsed.data.recordId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Growth record not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update growth record." };
+  }
+}
+
+export async function deleteGrowthRecordAction(
+  input: z.infer<typeof deleteChildRecordSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = deleteChildRecordSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.growth_milestones.manage"
+    );
+    if (!allowed) {
+      return { ok: false, error: "Missing permission: child_dev.growth_milestones.manage" };
+    }
+
+    const { data, error } = await supabase
+      .from("child_growth_records")
+      .delete()
+      .eq("id", parsed.data.id)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Growth record not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete growth record." };
+  }
+}
+
+export async function updateMilestoneAction(
+  input: z.infer<typeof updateMilestoneSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = updateMilestoneSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid milestone." };
+  }
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.growth_milestones.manage"
+    );
+    if (!allowed) {
+      return { ok: false, error: "Missing permission: child_dev.growth_milestones.manage" };
+    }
+
+    const { data, error } = await supabase
+      .from("child_milestones")
+      .update({
+        category: parsed.data.category,
+        title: parsed.data.title,
+        description: parsed.data.description,
+        achieved_on: parsed.data.achievedOn,
+        photo_attachment_name: parsed.data.photoAttachmentName,
+      })
+      .eq("id", parsed.data.milestoneId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Milestone not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update milestone." };
+  }
+}
+
+export async function deleteMilestoneAction(
+  input: z.infer<typeof deleteChildRecordSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = deleteChildRecordSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.growth_milestones.manage"
+    );
+    if (!allowed) {
+      return { ok: false, error: "Missing permission: child_dev.growth_milestones.manage" };
+    }
+
+    const { data, error } = await supabase
+      .from("child_milestones")
+      .delete()
+      .eq("id", parsed.data.id)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Milestone not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete milestone." };
+  }
+}
+
+export async function updateEducationRecordAction(
+  input: z.infer<typeof updateEducationRecordSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = updateEducationRecordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid education record." };
+  }
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.growth_milestones.manage"
+    );
+    if (!allowed) {
+      return { ok: false, error: "Missing permission: child_dev.growth_milestones.manage" };
+    }
+
+    const { data, error } = await supabase
+      .from("child_education_records")
+      .update({
+        record_type: parsed.data.recordType,
+        title: parsed.data.title,
+        details: parsed.data.details,
+        event_date: parsed.data.eventDate,
+      })
+      .eq("id", parsed.data.recordId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Education record not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update education record." };
+  }
+}
+
+export async function deleteEducationRecordAction(
+  input: z.infer<typeof deleteChildRecordSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = deleteChildRecordSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.growth_milestones.manage"
+    );
+    if (!allowed) {
+      return { ok: false, error: "Missing permission: child_dev.growth_milestones.manage" };
+    }
+
+    const { data, error } = await supabase
+      .from("child_education_records")
+      .delete()
+      .eq("id", parsed.data.id)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Education record not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete education record." };
+  }
+}
+
+export async function updateHealthRecordAction(
+  input: z.infer<typeof updateHealthRecordSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = updateHealthRecordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid health record." };
+  }
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.health.view"
+    );
+    if (!allowed) return { ok: false, error: "Missing permission: child_dev.health.view" };
+
+    const { data, error } = await supabase
+      .from("child_health_records")
+      .update({
+        record_type: parsed.data.recordType,
+        title: parsed.data.title,
+        provider_name: parsed.data.providerName,
+        recorded_on: parsed.data.recordedOn,
+        notes: parsed.data.notes,
+      })
+      .eq("id", parsed.data.recordId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Health record not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update health record." };
+  }
+}
+
+export async function deleteHealthRecordAction(
+  input: z.infer<typeof deleteChildRecordSchema>
+) {
+  await requireAuthenticatedUser();
+  const parsed = deleteChildRecordSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  try {
+    const { supabase, allowed } = await checkChildPermission(
+      parsed.data.familyId,
+      "child_dev.health.view"
+    );
+    if (!allowed) return { ok: false, error: "Missing permission: child_dev.health.view" };
+
+    const { data, error } = await supabase
+      .from("child_health_records")
+      .delete()
+      .eq("id", parsed.data.id)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!data) return { ok: false, error: "Health record not found or access denied." };
+
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "child-dev"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete health record." };
   }
 }

@@ -13,6 +13,13 @@ import {
   createMealPlanSchema,
   createRecipeSchema,
   createServiceProviderSchema,
+  deleteHouseholdItemSchema,
+  updateHomeAssetSchema,
+  updateInventoryItemSchema,
+  updateMaintenanceTaskSchema,
+  updateMealPlanSchema,
+  updateRecipeSchema,
+  updateServiceProviderSchema,
 } from "./schemas";
 
 async function getMemberWithPerm(familyId: string, userId: string, perm: string) {
@@ -386,6 +393,394 @@ export async function createServiceProviderAction(
     email: parsed.data.email,
   });
   if (error) return { ok: false, error: error.message };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "home"));
+  return { ok: true };
+}
+
+export async function updateInventoryItemAction(
+  input: z.infer<typeof updateInventoryItemSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = updateInventoryItemSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid inventory item." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "inventory.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: inventory.manage" };
+
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .update({
+      name: parsed.data.name,
+      category: parsed.data.category,
+      quantity: parsed.data.quantity,
+      unit: parsed.data.unit,
+      min_threshold: parsed.data.minThreshold,
+      expires_on: parsed.data.expiresOn,
+    })
+    .eq("id", parsed.data.itemId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Inventory item not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "inventory"));
+  return { ok: true };
+}
+
+export async function deleteInventoryItemAction(
+  input: z.infer<typeof deleteHouseholdItemSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = deleteHouseholdItemSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "inventory.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: inventory.manage" };
+
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .delete()
+    .eq("id", parsed.data.id)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Inventory item not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "inventory"));
+  return { ok: true };
+}
+
+export async function updateRecipeAction(input: z.infer<typeof updateRecipeSchema>) {
+  const user = await requireAuthenticatedUser();
+  const parsed = updateRecipeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid recipe." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "meals.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: meals.manage" };
+
+  const { data, error } = await supabase
+    .from("recipes")
+    .update({
+      title: parsed.data.title,
+      prep_minutes: parsed.data.prepMinutes,
+      servings: parsed.data.servings,
+      dietary_tags: parsed.data.dietaryTags,
+      ingredients_jsonb: parsed.data.ingredients,
+      instructions: parsed.data.instructions,
+    })
+    .eq("id", parsed.data.recipeId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Recipe not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "meals"));
+  return { ok: true };
+}
+
+export async function deleteRecipeAction(
+  input: z.infer<typeof deleteHouseholdItemSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = deleteHouseholdItemSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "meals.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: meals.manage" };
+
+  const { data, error } = await supabase
+    .from("recipes")
+    .delete()
+    .eq("id", parsed.data.id)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Recipe not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "meals"));
+  return { ok: true };
+}
+
+export async function updateMealPlanAction(
+  input: z.infer<typeof updateMealPlanSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = updateMealPlanSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid meal plan." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "meals.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: meals.manage" };
+
+  const updatePayload: Record<string, unknown> = {
+    planned_on: parsed.data.plannedOn,
+    meal_slot: parsed.data.mealSlot,
+    recipe_id: parsed.data.recipeId,
+    custom_title: parsed.data.customTitle,
+    preferences_note: parsed.data.preferencesNote,
+  };
+  if (typeof parsed.data.isCompleted === "boolean") {
+    updatePayload.is_completed = parsed.data.isCompleted;
+  }
+
+  const { data, error } = await supabase
+    .from("meal_plans")
+    .update(updatePayload)
+    .eq("id", parsed.data.planId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Meal plan not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "meals"));
+  return { ok: true };
+}
+
+export async function deleteMealPlanAction(
+  input: z.infer<typeof deleteHouseholdItemSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = deleteHouseholdItemSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "meals.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: meals.manage" };
+
+  const { data, error } = await supabase
+    .from("meal_plans")
+    .delete()
+    .eq("id", parsed.data.id)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Meal plan not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "meals"));
+  return { ok: true };
+}
+
+export async function updateHomeAssetAction(
+  input: z.infer<typeof updateHomeAssetSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = updateHomeAssetSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid home asset." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "home.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: home.manage" };
+
+  const { data, error } = await supabase
+    .from("home_assets")
+    .update({
+      name: parsed.data.name,
+      category: parsed.data.category,
+      brand_model: parsed.data.brandModel,
+      purchased_on: parsed.data.purchasedOn,
+      warranty_expires_on: parsed.data.warrantyExpiresOn,
+    })
+    .eq("id", parsed.data.assetId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Home asset not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "home"));
+  return { ok: true };
+}
+
+export async function deleteHomeAssetAction(
+  input: z.infer<typeof deleteHouseholdItemSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = deleteHouseholdItemSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "home.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: home.manage" };
+
+  const { data, error } = await supabase
+    .from("home_assets")
+    .delete()
+    .eq("id", parsed.data.id)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Home asset not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "home"));
+  return { ok: true };
+}
+
+export async function updateMaintenanceTaskAction(
+  input: z.infer<typeof updateMaintenanceTaskSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = updateMaintenanceTaskSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid maintenance task." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "home.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: home.manage" };
+
+  const { data, error } = await supabase
+    .from("home_maintenance_tasks")
+    .update({
+      asset_id: parsed.data.assetId,
+      provider_id: parsed.data.providerId,
+      title: parsed.data.title,
+      interval_days: parsed.data.intervalDays,
+      next_due_on: parsed.data.nextDueOn,
+    })
+    .eq("id", parsed.data.taskId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Maintenance task not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "home"));
+  return { ok: true };
+}
+
+export async function deleteMaintenanceTaskAction(
+  input: z.infer<typeof deleteHouseholdItemSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = deleteHouseholdItemSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "home.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: home.manage" };
+
+  const { data, error } = await supabase
+    .from("home_maintenance_tasks")
+    .delete()
+    .eq("id", parsed.data.id)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Maintenance task not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "home"));
+  return { ok: true };
+}
+
+export async function updateServiceProviderAction(
+  input: z.infer<typeof updateServiceProviderSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = updateServiceProviderSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid service provider." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "home.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: home.manage" };
+
+  const { data, error } = await supabase
+    .from("home_service_providers")
+    .update({
+      name: parsed.data.name,
+      specialty: parsed.data.specialty,
+      phone: parsed.data.phone,
+      email: parsed.data.email,
+    })
+    .eq("id", parsed.data.providerId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Service provider not found or access denied." };
+
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "home"));
+  return { ok: true };
+}
+
+export async function deleteServiceProviderAction(
+  input: z.infer<typeof deleteHouseholdItemSchema>
+) {
+  const user = await requireAuthenticatedUser();
+  const parsed = deleteHouseholdItemSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid request." };
+
+  const { supabase, allowed } = await getMemberWithPerm(
+    parsed.data.familyId,
+    user.id,
+    "home.manage"
+  );
+  if (!allowed) return { ok: false, error: "Missing permission: home.manage" };
+
+  const { data, error } = await supabase
+    .from("home_service_providers")
+    .delete()
+    .eq("id", parsed.data.id)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Service provider not found or access denied." };
 
   revalidatePath(routes.familyDomain(parsed.data.familyId, "home"));
   return { ok: true };

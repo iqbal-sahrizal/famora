@@ -7,11 +7,13 @@ import {
   CalendarClock,
   CheckCircle2,
   Lock,
+  Pencil,
   PieChart,
   Play,
   Plus,
   Receipt,
   Repeat,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, Section } from "@/components/layout/primitives";
@@ -30,8 +32,13 @@ import {
   createBillAction,
   createBudgetAction,
   createRecurringScheduleAction,
+  deleteBillAction,
+  deleteBudgetAction,
+  deleteRecurringScheduleAction,
   payBillAction,
   runDueRecurringSchedulesAction,
+  updateBillAction,
+  updateBudgetAction,
 } from "../budget-actions";
 import type { BudgetsBillsPageData } from "../budget-server";
 import { formatNumericCurrency } from "../money";
@@ -49,7 +56,9 @@ export function FamilyBudgetsBillsView({
   const [busy, setBusy] = React.useState(false);
 
   const [budgetOpen, setBudgetOpen] = React.useState(false);
+  const [editingBudgetId, setEditingBudgetId] = React.useState<string | null>(null);
   const [billOpen, setBillOpen] = React.useState(false);
+  const [editingBillId, setEditingBillId] = React.useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [payTarget, setPayTarget] = React.useState<BudgetsBillsPageData["bills"][number] | null>(null);
   const [payAccountId, setPayAccountId] = React.useState(data.accounts[0]?.id ?? "");
@@ -79,6 +88,15 @@ export function FamilyBudgetsBillsView({
   const [sFreq, setSFreq] = React.useState<"weekly" | "monthly" | "yearly">("monthly");
   const [sNext, setSNext] = React.useState(() => new Date().toISOString().slice(0, 10));
 
+  React.useEffect(() => {
+    if (!data.accounts.some((a) => a.id === payAccountId)) {
+      setPayAccountId(data.accounts[0]?.id ?? "");
+    }
+    if (!data.accounts.some((a) => a.id === sAccount)) {
+      setSAccount(data.accounts[0]?.id ?? "");
+    }
+  }, [data.accounts, payAccountId, sAccount]);
+
   if (!data.authorized) {
     return (
       <Section>
@@ -97,21 +115,35 @@ export function FamilyBudgetsBillsView({
 
   const handleCreateBudget = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
-    const res = await createBudgetAction({
-      familyId,
-      name: bName,
-      category: bCategory,
-      periodType: "monthly",
-      periodStart: bStart,
-      periodEnd: bEnd,
-      limitNumeric: bLimit,
-      alertThresholdPct: 80,
-    });
+    const res = editingBudgetId
+      ? await updateBudgetAction({
+          familyId,
+          budgetId: editingBudgetId,
+          name: bName,
+          category: bCategory,
+          periodType: "monthly",
+          periodStart: bStart,
+          periodEnd: bEnd,
+          limitNumeric: bLimit,
+          alertThresholdPct: 80,
+        })
+      : await createBudgetAction({
+          familyId,
+          name: bName,
+          category: bCategory,
+          periodType: "monthly",
+          periodStart: bStart,
+          periodEnd: bEnd,
+          limitNumeric: bLimit,
+          alertThresholdPct: 80,
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setBName("");
+      setEditingBudgetId(null);
       setBudgetOpen(false);
       toast.success(t("budgets.createdToast"));
       router.refresh();
@@ -120,23 +152,37 @@ export function FamilyBudgetsBillsView({
 
   const handleCreateBill = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
-    const res = await createBillAction({
-      familyId,
-      accountId: data.accounts[0]?.id ?? null,
-      title: billTitle,
-      payee: billPayee,
-      category: "Utilities",
-      amountNumeric: billAmount,
-      dueOn: billDue,
-      recurrenceFrequency: billFreq,
-    });
+    const res = editingBillId
+      ? await updateBillAction({
+          familyId,
+          billId: editingBillId,
+          accountId: data.accounts[0]?.id ?? null,
+          title: billTitle,
+          payee: billPayee,
+          category: "Utilities",
+          amountNumeric: billAmount,
+          dueOn: billDue,
+          recurrenceFrequency: billFreq,
+        })
+      : await createBillAction({
+          familyId,
+          accountId: data.accounts[0]?.id ?? null,
+          title: billTitle,
+          payee: billPayee,
+          category: "Utilities",
+          amountNumeric: billAmount,
+          dueOn: billDue,
+          recurrenceFrequency: billFreq,
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setBillTitle("");
       setBillPayee("");
       setBillAmount("");
+      setEditingBillId(null);
       setBillOpen(false);
       toast.success(t("budgets.billCreatedToast"));
       router.refresh();
@@ -144,7 +190,11 @@ export function FamilyBudgetsBillsView({
   };
 
   const handlePayBill = async () => {
-    if (!payTarget || !payAccountId) return;
+    if (!payTarget) return;
+    if (!payAccountId) {
+      toast.error(te("Select an account."));
+      return;
+    }
     setBusy(true);
     const res = await payBillAction({
       familyId,
@@ -152,12 +202,13 @@ export function FamilyBudgetsBillsView({
       accountId: payAccountId,
     });
     setBusy(false);
-    setPayTarget(null);
-    if (!res.ok) toast.error(te(res.error));
-    else {
-      toast.success(t("budgets.billPaidToast"));
-      router.refresh();
+    if (!res.ok) {
+      toast.error(te(res.error));
+      return;
     }
+    setPayTarget(null);
+    toast.success(t("budgets.billPaidToast"));
+    router.refresh();
   };
 
   const handleCreateSchedule = async (e: React.FormEvent) => {
@@ -302,11 +353,49 @@ export function FamilyBudgetsBillsView({
                         {formatNumericCurrency(b.progress.spentNumeric, data.currencyCode)}
                       </strong>
                     </span>
-                    <span className="text-[var(--text-secondary)]">
-                      {t("budgets.limitLabel", {
-                        limit: formatNumericCurrency(b.progress.limitNumeric, data.currencyCode),
-                      })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[var(--text-secondary)]">
+                        {t("budgets.limitLabel", {
+                          limit: formatNumericCurrency(b.progress.limitNumeric, data.currencyCode),
+                        })}
+                      </span>
+                      {data.canManageTransactions && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            aria-label={`${t("common.edit")} ${b.name}`}
+                            onClick={() => {
+                              setEditingBudgetId(b.id);
+                              setBName(b.name);
+                              setBCategory(b.category);
+                              setBLimit(b.progress.limitNumeric);
+                              setBStart(b.periodStart);
+                              setBEnd(b.periodEnd);
+                              setBudgetOpen(true);
+                            }}
+                            className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            aria-label={`${t("common.delete")} ${b.name}`}
+                            onClick={async () => {
+                              setBusy(true);
+                              const r = await deleteBudgetAction({ familyId, budgetId: b.id });
+                              setBusy(false);
+                              if (!r.ok) toast.error(te(r.error));
+                              else router.refresh();
+                            }}
+                            className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </Card>
               );
@@ -357,10 +446,46 @@ export function FamilyBudgetsBillsView({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="font-heading text-[17px] font-bold tabular-nums">
                     {formatNumericCurrency(bill.amountNumeric, data.currencyCode)}
                   </span>
+                  {data.canManageTransactions && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${t("common.edit")} ${bill.title}`}
+                        onClick={() => {
+                          setEditingBillId(bill.id);
+                          setBillTitle(bill.title);
+                          setBillPayee(bill.payee);
+                          setBillAmount(bill.amountNumeric);
+                          setBillDue(bill.dueOn);
+                          setBillFreq(bill.recurrenceFrequency as typeof billFreq);
+                          setBillOpen(true);
+                        }}
+                        className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${t("common.delete")} ${bill.title}`}
+                        onClick={async () => {
+                          setBusy(true);
+                          const r = await deleteBillAction({ familyId, billId: bill.id });
+                          setBusy(false);
+                          if (!r.ok) toast.error(te(r.error));
+                          else router.refresh();
+                        }}
+                        className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                      </button>
+                    </>
+                  )}
                   {bill.computedStatus !== "paid" &&
                     data.canManageTransactions &&
                     data.accounts.length > 0 && (
@@ -415,9 +540,31 @@ export function FamilyBudgetsBillsView({
                       })}
                     </p>
                   </div>
-                  <span className="font-heading text-[16px] font-bold tabular-nums">
-                    {formatNumericCurrency(s.amountNumeric, data.currencyCode)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-heading text-[16px] font-bold tabular-nums">
+                      {formatNumericCurrency(s.amountNumeric, data.currencyCode)}
+                    </span>
+                    {data.canManageTransactions && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${t("common.delete")} ${s.merchant}`}
+                        onClick={async () => {
+                          setBusy(true);
+                          const r = await deleteRecurringScheduleAction({
+                            familyId,
+                            scheduleId: s.id,
+                          });
+                          setBusy(false);
+                          if (!r.ok) toast.error(te(r.error));
+                          else router.refresh();
+                        }}
+                        className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                      </button>
+                    )}
+                  </div>
                 </Card>
               ))}
             </div>

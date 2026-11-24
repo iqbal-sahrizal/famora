@@ -68,3 +68,35 @@ export const createServiceProviderSchema = z.object({
   phone: z.string().trim().max(40).default(""),
   email: z.string().trim().max(120).default(""),
 });
+
+export const updateInventoryItemSchema = createInventoryItemSchema.extend({
+  itemId: z.string().uuid(),
+});
+
+export const updateRecipeSchema = createRecipeSchema.extend({
+  recipeId: z.string().uuid(),
+});
+
+export const updateMealPlanSchema = createMealPlanSchema.extend({
+  planId: z.string().uuid(),
+  isCompleted: z.boolean().optional(),
+});
+
+export const updateHomeAssetSchema = createHomeAssetSchema.extend({
+  assetId: z.string().uuid(),
+});
+
+export const updateMaintenanceTaskSchema = createMaintenanceTaskSchema
+  .omit({ syncToCalendar: true })
+  .extend({
+    taskId: z.string().uuid(),
+  });
+
+export const updateServiceProviderSchema = createServiceProviderSchema.extend({
+  providerId: z.string().uuid(),
+});
+
+export const deleteHouseholdItemSchema = z.object({
+  familyId: z.string().uuid(),
+  id: z.string().uuid(),
+});

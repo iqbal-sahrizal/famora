@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   BookOpen,
   Clock,
+  Pencil,
   Plus,
   ShoppingBag,
+  Trash2,
   Users,
   UtensilsCrossed,
 } from "lucide-react";
@@ -25,7 +27,11 @@ import { useLocale } from "@/providers/locale-provider";
 import {
   createMealPlanAction,
   createRecipeAction,
+  deleteMealPlanAction,
+  deleteRecipeAction,
   syncMealIngredientsToShoppingAction,
+  updateMealPlanAction,
+  updateRecipeAction,
 } from "../actions";
 import type { getMealsPageData } from "../server";
 
@@ -40,7 +46,9 @@ export function MealsView({
   const { locale, t, te } = useLocale();
   const [tab, setTab] = React.useState<"planner" | "recipes">("planner");
   const [planOpen, setPlanOpen] = React.useState(false);
+  const [editingPlanId, setEditingPlanId] = React.useState<string | null>(null);
   const [recipeOpen, setRecipeOpen] = React.useState(false);
+  const [editingRecipeId, setEditingRecipeId] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   const [plannedOn, setPlannedOn] = React.useState(() => new Date().toISOString().slice(0, 10));
@@ -74,18 +82,31 @@ export function MealsView({
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const res = await createMealPlanAction({
-      familyId,
-      plannedOn,
-      mealSlot,
-      recipeId: recipeId || null,
-      customTitle,
-      preferencesNote: prefNote,
-    });
+    const res = editingPlanId
+      ? await updateMealPlanAction({
+          familyId,
+          planId: editingPlanId,
+          plannedOn,
+          mealSlot,
+          recipeId: recipeId || null,
+          customTitle,
+          preferencesNote: prefNote,
+        })
+      : await createMealPlanAction({
+          familyId,
+          plannedOn,
+          mealSlot,
+          recipeId: recipeId || null,
+          customTitle,
+          preferencesNote: prefNote,
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setCustomTitle("");
+      setPrefNote("");
+      setRecipeId("");
+      setEditingPlanId(null);
       setPlanOpen(false);
       toast.success(t("meals.plannedToast"));
       router.refresh();
@@ -101,19 +122,31 @@ export function MealsView({
       .filter(Boolean)
       .map((name) => ({ name, quantity: "1", unit: "pcs" }));
 
-    const res = await createRecipeAction({
-      familyId,
-      title: rTitle,
-      prepMinutes: Number(rPrep) || 25,
-      servings: Number(rServings) || 4,
-      dietaryTags: rTags.split(",").map((tag) => tag.trim()).filter(Boolean),
-      ingredients,
-      instructions: "",
-    });
+    const res = editingRecipeId
+      ? await updateRecipeAction({
+          familyId,
+          recipeId: editingRecipeId,
+          title: rTitle,
+          prepMinutes: Number(rPrep) || 25,
+          servings: Number(rServings) || 4,
+          dietaryTags: rTags.split(",").map((tag) => tag.trim()).filter(Boolean),
+          ingredients,
+          instructions: "",
+        })
+      : await createRecipeAction({
+          familyId,
+          title: rTitle,
+          prepMinutes: Number(rPrep) || 25,
+          servings: Number(rServings) || 4,
+          dietaryTags: rTags.split(",").map((tag) => tag.trim()).filter(Boolean),
+          ingredients,
+          instructions: "",
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setRTitle("");
+      setEditingRecipeId(null);
       setRecipeOpen(false);
       toast.success(t("meals.recipeSavedToast"));
       router.refresh();
@@ -173,9 +206,47 @@ export function MealsView({
                 variant={p.mealSlot === "dinner" ? "peach" : p.mealSlot === "lunch" ? "sage" : "elevated"}
                 className="space-y-2 p-5"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <Badge variant="neutral">{t(`meals.slot.${p.mealSlot}` as "meals.slot.dinner")}</Badge>
-                  <span className="text-[12px] opacity-80 tabular-nums">{formatLocalizedDate(p.plannedOn, locale)}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[12px] opacity-80 tabular-nums">{formatLocalizedDate(p.plannedOn, locale)}</span>
+                    {data.canManage && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          aria-label={`${t("common.edit")} ${p.title || "meal"}`}
+                          onClick={() => {
+                            setEditingPlanId(p.id);
+                            setPlannedOn(p.plannedOn);
+                            setMealSlot(p.mealSlot as typeof mealSlot);
+                            setRecipeId("");
+                            setCustomTitle(p.title ?? "");
+                            setPrefNote(p.preferencesNote ?? "");
+                            setPlanOpen(true);
+                          }}
+                          className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          aria-label={`${t("common.delete")} ${p.title || "meal"}`}
+                          onClick={async () => {
+                            setBusy(true);
+                            const res = await deleteMealPlanAction({ familyId, id: p.id });
+                            setBusy(false);
+                            if (!res.ok) toast.error(te(res.error));
+                            else router.refresh();
+                          }}
+                          className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <CardTitle className="text-[18px]">{p.title || t("meals.defaultTitle")}</CardTitle>
                 {p.preferencesNote && <CardDescription>{p.preferencesNote}</CardDescription>}
@@ -198,10 +269,48 @@ export function MealsView({
           ) : (
             data.recipes.map((r) => (
               <Card key={r.id} className="space-y-3 p-6">
-                <div className="flex flex-wrap gap-1.5">
-                  {r.dietaryTags.map((tag) => (
-                    <Badge key={tag} variant="lavender">{tag}</Badge>
-                  ))}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {r.dietaryTags.map((tag) => (
+                      <Badge key={tag} variant="lavender">{tag}</Badge>
+                    ))}
+                  </div>
+                  {data.canManage && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${t("common.edit")} ${r.title}`}
+                        onClick={() => {
+                          setEditingRecipeId(r.id);
+                          setRTitle(r.title);
+                          setRPrep(String(r.prepMinutes));
+                          setRServings(String(r.servings));
+                          setRTags(r.dietaryTags.join(", "));
+                          setRIngredients(r.ingredients.map((i) => i.name).join("\n"));
+                          setRecipeOpen(true);
+                        }}
+                        className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${t("common.delete")} ${r.title}`}
+                        onClick={async () => {
+                          setBusy(true);
+                          const res = await deleteRecipeAction({ familyId, id: r.id });
+                          setBusy(false);
+                          if (!res.ok) toast.error(te(res.error));
+                          else router.refresh();
+                        }}
+                        className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <CardTitle className="text-[19px]">{r.title}</CardTitle>
                 <div className="flex items-center gap-4 text-[12.5px] text-[var(--text-secondary)] tabular-nums">
@@ -219,7 +328,7 @@ export function MealsView({
         </div>
       )}
 
-      <BottomSheet open={planOpen} onClose={() => setPlanOpen(false)} title={t("meals.modal.planTitle")}>
+      <BottomSheet open={planOpen} onClose={() => { setPlanOpen(false); setEditingPlanId(null); }} title={t("meals.modal.planTitle")}>
         <form onSubmit={handleCreatePlan} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label={t("meals.modal.date")} type="date" required value={plannedOn} onChange={(e) => setPlannedOn(e.target.value)} />
@@ -236,7 +345,7 @@ export function MealsView({
         </form>
       </BottomSheet>
 
-      <BottomSheet open={recipeOpen} onClose={() => setRecipeOpen(false)} title={t("meals.modal.recipeTitle")}>
+      <BottomSheet open={recipeOpen} onClose={() => { setRecipeOpen(false); setEditingRecipeId(null); }} title={t("meals.modal.recipeTitle")}>
         <form onSubmit={handleCreateRecipe} className="space-y-4">
           <Input label={t("meals.modal.recipeName")} required placeholder={t("meals.modal.recipePlaceholder")} value={rTitle} onChange={(e) => setRTitle(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">

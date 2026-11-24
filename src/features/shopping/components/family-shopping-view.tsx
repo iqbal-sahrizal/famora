@@ -16,6 +16,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import { OfflineCacheBanner } from "@/components/pwa/offline-cache-banner";
 import { PageHeader, Section } from "@/components/layout/primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,9 +25,8 @@ import { BottomSheet, Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useOfflineCachedData } from "@/hooks/use-offline-cached-data";
 import { toIntlLocale } from "@/lib/i18n";
-import { writeOfflineCache } from "@/lib/pwa/indexeddb";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
@@ -44,7 +44,6 @@ import {
 import {
   createQueuedShoppingMutation,
   enqueueShoppingMutation,
-  flushShoppingMutations,
 } from "../offline-queue";
 import type { ShoppingPageData } from "../server";
 
@@ -57,9 +56,24 @@ export function FamilyShoppingView({
 }) {
   const router = useRouter();
   const { locale, t, te } = useLocale();
-  const isOnline = useOnlineStatus();
+  const isShoppingEmpty = React.useCallback(
+    (d: ShoppingPageData) => d.lists.length === 0 && d.items.length === 0,
+    []
+  );
+  const {
+    effectiveData,
+    isFromCache,
+    isCacheExpired,
+    cachedAt,
+    isOnline,
+  } = useOfflineCachedData({
+    familyId,
+    domain: "shopping",
+    serverData: data,
+    isEmptyData: isShoppingEmpty,
+  });
   const [selectedListId, setSelectedListId] = React.useState<string | null>(
-    data.lists[0]?.id ?? null
+    effectiveData.lists[0]?.id ?? null
   );
   const [quickName, setQuickName] = React.useState("");
   const [quickCategory, setQuickCategory] = React.useState("Groceries");
@@ -82,10 +96,10 @@ export function FamilyShoppingView({
     itemCount: number;
   } | null>(null);
 
-  const [itemsState, setItemsState] = React.useState(data.items);
+  const [itemsState, setItemsState] = React.useState(effectiveData.items);
   React.useEffect(() => {
-    setItemsState(data.items);
-  }, [data.items]);
+    setItemsState(effectiveData.items);
+  }, [effectiveData.items]);
 
   type ShoppingItem = ShoppingPageData["items"][number];
   const [editingItem, setEditingItem] = React.useState<ShoppingItem | null>(null);
@@ -97,9 +111,17 @@ export function FamilyShoppingView({
   const [editItemNotes, setEditItemNotes] = React.useState("");
 
   const selectedList = React.useMemo(
-    () => data.lists.find((l) => l.id === selectedListId) ?? null,
-    [data.lists, selectedListId]
+    () => effectiveData.lists.find((l) => l.id === selectedListId) ?? null,
+    [effectiveData.lists, selectedListId]
   );
+
+  React.useEffect(() => {
+    if (selectedListId && !effectiveData.lists.some((l) => l.id === selectedListId)) {
+      setSelectedListId(effectiveData.lists[0]?.id ?? null);
+    } else if (!selectedListId && effectiveData.lists.length > 0) {
+      setSelectedListId(effectiveData.lists[0]?.id ?? null);
+    }
+  }, [effectiveData.lists, selectedListId]);
 
   // Supabase Realtime subscription for collaborative live updates
   React.useEffect(() => {
@@ -129,49 +151,6 @@ export function FamilyShoppingView({
     }
   }, [familyId, router]);
 
-  // Cache latest shopping list snapshot in IndexedDB when online
-  React.useEffect(() => {
-    if (isOnline && data.items) {
-      void writeOfflineCache(familyId, "shopping", data);
-    }
-  }, [familyId, isOnline, data]);
-
-  // Flush queued offline mutations when connectivity returns
-  React.useEffect(() => {
-    if (!isOnline) return;
-    void flushShoppingMutations(familyId, async (m) => {
-      if (m.type === "add_item") {
-        const res = await addShoppingItemAction({
-          familyId,
-          listId: (m.payload.listId as string | null) ?? null,
-          name: String(m.payload.name ?? ""),
-          category: String(m.payload.category ?? "Groceries"),
-          quantity: String(m.payload.quantity ?? "1"),
-          unit: "pcs",
-          estimatedPriceCents: 0,
-          notes: "",
-          assignedShopperMemberId: null,
-          clientMutationId: m.id,
-        });
-        return res.ok;
-      }
-      if (m.type === "toggle_check") {
-        const res = await toggleShoppingCheckAction({
-          familyId,
-          itemId: String(m.payload.itemId),
-          isChecked: Boolean(m.payload.isChecked),
-        });
-        return res.ok;
-      }
-      return true;
-    }).then(({ flushed }) => {
-      if (flushed > 0) {
-        toast.success(t("shopping.toast.synced", { count: flushed }));
-        router.refresh();
-      }
-    });
-  }, [familyId, isOnline, router, t]);
-
   const visibleItems = React.useMemo(() => {
     if (!selectedListId) return itemsState;
     return itemsState.filter((i) => i.listId === selectedListId);
@@ -195,8 +174,32 @@ export function FamilyShoppingView({
         name: quickName.trim(),
         category: quickCategory,
         quantity: quickQty || "1",
+        unit: "pcs",
+        estimatedPriceCents: 0,
+        notes: "",
+        assignedShopperMemberId: quickShopper || null,
       });
       await enqueueShoppingMutation(mutation);
+      const shopperName =
+        effectiveData.members.find((m) => m.id === quickShopper)?.displayName ??
+        null;
+      setItemsState((prev) => [
+        {
+          id: mutation.id,
+          listId: selectedListId,
+          name: quickName.trim(),
+          category: quickCategory,
+          quantity: quickQty || "1",
+          unit: "pcs",
+          estimatedPriceCents: 0,
+          notes: "",
+          isChecked: false,
+          assignedShopperName: shopperName,
+          addedByName: null,
+          checkedByName: null,
+        },
+        ...prev,
+      ]);
       setQuickName("");
       toast.info(t("shopping.toast.offlineAdd"));
       return;
@@ -271,6 +274,18 @@ export function FamilyShoppingView({
     setItemsState((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, quantity: nextQty } : it))
     );
+
+    if (!isOnline) {
+      await enqueueShoppingMutation(
+        createQueuedShoppingMutation(familyId, "update_quantity", {
+          itemId,
+          quantity: nextQty,
+        })
+      );
+      toast.info(t("shopping.toast.offlineToggle"));
+      return;
+    }
+
     const res = await updateShoppingQuantityAction({
       familyId,
       itemId,
@@ -410,6 +425,11 @@ export function FamilyShoppingView({
 
   return (
     <Section>
+      <OfflineCacheBanner
+        isFromCache={isFromCache}
+        isCacheExpired={isCacheExpired}
+        cachedAt={cachedAt}
+      />
       <PageHeader
         title={t("shopping.title")}
         description={t("shopping.subtitle")}
@@ -707,7 +727,7 @@ export function FamilyShoppingView({
                     <Button
                       size="sm"
                       variant="tonal"
-                      disabled={busy}
+                      disabled={busy || !data.canManage}
                       onClick={async () => {
                         setBusy(true);
                         const r = await applyShoppingTemplateAction({
@@ -749,7 +769,7 @@ export function FamilyShoppingView({
                   <button
                     key={h.id}
                     type="button"
-                    disabled={busy}
+                    disabled={busy || !data.canManage}
                     onClick={async () => {
                       setBusy(true);
                       const r = await addShoppingItemAction({

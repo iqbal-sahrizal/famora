@@ -21,11 +21,21 @@ export function DatePicker({
   const { locale, t } = useLocale();
   const intlLocale = toIntlLocale(locale);
   const days = locale === "id" ? DAYS_ID : DAYS_EN;
+  const safeValue = React.useMemo(
+    () => (Number.isNaN(value.getTime()) ? new Date() : value),
+    [value]
+  );
+  const valueTime = safeValue.getTime();
   const [open, setOpen] = React.useState(false);
   const [viewMonth, setViewMonth] = React.useState(
-    new Date(value.getFullYear(), value.getMonth(), 1)
+    () => new Date(safeValue.getFullYear(), safeValue.getMonth(), 1)
   );
   const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const d = new Date(valueTime);
+    setViewMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+  }, [valueTime]);
 
   React.useEffect(() => {
     const onOutside = (e: MouseEvent) => {
@@ -40,7 +50,7 @@ export function DatePicker({
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const formatted = value.toLocaleDateString(intlLocale, {
+  const formatted = safeValue.toLocaleDateString(intlLocale, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -63,7 +73,7 @@ export function DatePicker({
       </button>
 
       {open && (
-        <div className="absolute top-full z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[20px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-float)]">
+        <div className="absolute top-full z-40 mt-2 max-h-[min(24rem,65dvh)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-[20px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-float)]">
           <div className="mb-3 flex items-center justify-between">
             <button
               type="button"
@@ -102,9 +112,9 @@ export function DatePicker({
             {Array.from({ length: daysInMonth }).map((_, idx) => {
               const day = idx + 1;
               const isSelected =
-                value.getFullYear() === year &&
-                value.getMonth() === month &&
-                value.getDate() === day;
+                safeValue.getFullYear() === year &&
+                safeValue.getMonth() === month &&
+                safeValue.getDate() === day;
               return (
                 <button
                   key={day}

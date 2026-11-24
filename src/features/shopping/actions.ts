@@ -61,12 +61,19 @@ export async function createShoppingListAction(
       .eq("status", "active")
       .maybeSingle<{ id: string }>();
 
+    if (!actor) {
+      return { ok: false, error: "Not an active member of this family." };
+    }
+    if (!(await hasShoppingManagePermission(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "You do not have permission to manage shopping lists." };
+    }
+
     const { error } = await supabase.from("shopping_lists").insert({
       family_id: parsed.data.familyId,
       name: parsed.data.name,
       store_name: parsed.data.storeName,
       assigned_shopper_member_id: parsed.data.assignedShopperMemberId,
-      created_by_member_id: actor?.id ?? null,
+      created_by_member_id: actor.id,
     });
 
     if (error) return { ok: false, error: error.message };
@@ -179,6 +186,13 @@ export async function addShoppingItemAction(
       .eq("status", "active")
       .maybeSingle<{ id: string }>();
 
+    if (!actor) {
+      return { ok: false, error: "Not an active member of this family." };
+    }
+    if (!(await hasShoppingManagePermission(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "You do not have permission to manage shopping items." };
+    }
+
     const payload = {
       family_id: parsed.data.familyId,
       list_id: parsed.data.listId,
@@ -189,7 +203,7 @@ export async function addShoppingItemAction(
       estimated_price_cents: parsed.data.estimatedPriceCents,
       notes: parsed.data.notes,
       assigned_shopper_member_id: parsed.data.assignedShopperMemberId,
-      added_by_member_id: actor?.id ?? null,
+      added_by_member_id: actor.id,
       client_mutation_id: parsed.data.clientMutationId ?? null,
     };
 
@@ -232,11 +246,18 @@ export async function toggleShoppingCheckAction(
       .eq("status", "active")
       .maybeSingle<{ id: string }>();
 
+    if (!actor) {
+      return { ok: false, error: "Not an active member of this family." };
+    }
+    if (!(await hasShoppingManagePermission(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "You do not have permission to manage shopping items." };
+    }
+
     const { data: item, error } = await supabase
       .from("shopping_items")
       .update({
         is_checked: parsed.data.isChecked,
-        checked_by_member_id: parsed.data.isChecked ? actor?.id ?? null : null,
+        checked_by_member_id: parsed.data.isChecked ? actor.id : null,
         checked_at: parsed.data.isChecked ? new Date().toISOString() : null,
       })
       .eq("id", parsed.data.itemId)
@@ -245,6 +266,7 @@ export async function toggleShoppingCheckAction(
       .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!item) return { ok: false, error: "Shopping item not found." };
 
     // Record into shopping_item_history when checked as purchased
     if (parsed.data.isChecked && item) {
@@ -276,19 +298,37 @@ export async function toggleShoppingCheckAction(
 export async function updateShoppingQuantityAction(
   input: UpdateShoppingQuantityInput
 ): Promise<ShoppingActionResult> {
-  await requireAuthenticatedUser();
+  const user = await requireAuthenticatedUser();
   const parsed = updateShoppingQuantitySchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid quantity." };
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase
+    const { data: actor } = await supabase
+      .from("family_members")
+      .select("id")
+      .eq("family_id", parsed.data.familyId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle<{ id: string }>();
+
+    if (!actor) {
+      return { ok: false, error: "Not an active member of this family." };
+    }
+    if (!(await hasShoppingManagePermission(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "You do not have permission to manage shopping items." };
+    }
+
+    const { data: updated, error } = await supabase
       .from("shopping_items")
       .update({ quantity: parsed.data.quantity })
       .eq("id", parsed.data.itemId)
-      .eq("family_id", parsed.data.familyId);
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!updated) return { ok: false, error: "Shopping item not found." };
     revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
     return { ok: true };
   } catch (err) {
@@ -326,7 +366,7 @@ export async function updateShoppingItemAction(
       return { ok: false, error: "You do not have permission to manage shopping items." };
     }
 
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("shopping_items")
       .update({
         name: parsed.data.name,
@@ -337,9 +377,12 @@ export async function updateShoppingItemAction(
         notes: parsed.data.notes,
       })
       .eq("id", parsed.data.itemId)
-      .eq("family_id", parsed.data.familyId);
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!updated) return { ok: false, error: "Shopping item not found." };
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
@@ -379,13 +422,16 @@ export async function deleteShoppingItemAction(
       return { ok: false, error: "You do not have permission to manage shopping items." };
     }
 
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
       .from("shopping_items")
       .delete()
       .eq("id", parsed.data.itemId)
-      .eq("family_id", parsed.data.familyId);
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Shopping item not found." };
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
@@ -401,12 +447,27 @@ export async function deleteShoppingItemAction(
 export async function saveShoppingTemplateAction(
   input: SaveTemplateInput
 ): Promise<ShoppingActionResult> {
-  await requireAuthenticatedUser();
+  const user = await requireAuthenticatedUser();
   const parsed = saveTemplateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid template." };
 
   try {
     const supabase = await createSupabaseServerClient();
+    const { data: actor } = await supabase
+      .from("family_members")
+      .select("id")
+      .eq("family_id", parsed.data.familyId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle<{ id: string }>();
+
+    if (!actor) {
+      return { ok: false, error: "Not an active member of this family." };
+    }
+    if (!(await hasShoppingManagePermission(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "You do not have permission to manage shopping templates." };
+    }
+
     const { error } = await supabase.from("shopping_templates").insert({
       family_id: parsed.data.familyId,
       name: parsed.data.name,
@@ -431,7 +492,7 @@ export async function applyShoppingTemplateAction(params: {
   const user = await requireAuthenticatedUser();
   try {
     const supabase = await createSupabaseServerClient();
-    const [{ data: actor }, { data: tpl }] = await Promise.all([
+    const [{ data: actor }, allowed, { data: tpl }] = await Promise.all([
       supabase
         .from("family_members")
         .select("id")
@@ -439,6 +500,7 @@ export async function applyShoppingTemplateAction(params: {
         .eq("user_id", user.id)
         .eq("status", "active")
         .maybeSingle<{ id: string }>(),
+      hasShoppingManagePermission(supabase, params.familyId),
       supabase
         .from("shopping_templates")
         .select("items_jsonb")
@@ -446,6 +508,13 @@ export async function applyShoppingTemplateAction(params: {
         .eq("family_id", params.familyId)
         .maybeSingle(),
     ]);
+
+    if (!actor) {
+      return { ok: false, error: "Not an active member of this family." };
+    }
+    if (!allowed) {
+      return { ok: false, error: "You do not have permission to apply shopping templates." };
+    }
 
     const items = Array.isArray(tpl?.items_jsonb)
       ? (tpl.items_jsonb as Array<{
@@ -466,7 +535,7 @@ export async function applyShoppingTemplateAction(params: {
         category: item.category ?? "Groceries",
         quantity: item.quantity ?? "1",
         unit: item.unit ?? "pcs",
-        added_by_member_id: actor?.id ?? null,
+        added_by_member_id: actor.id,
       }))
     );
 

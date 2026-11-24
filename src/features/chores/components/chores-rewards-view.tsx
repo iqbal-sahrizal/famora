@@ -7,9 +7,11 @@ import {
   Check,
   Gift,
   HeartHandshake,
+  Pencil,
   Plus,
   RotateCcw,
   Sparkles,
+  Trash2,
   Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,9 +30,13 @@ import {
   createChoreTemplateAction,
   createFamilyChallengeAction,
   createRewardAction,
+  deleteChoreTemplateAction,
+  deleteRewardAction,
   redeemRewardAction,
   reviewChoreSubmissionAction,
   submitChoreCompletionAction,
+  updateChoreTemplateAction,
+  updateRewardAction,
 } from "../actions";
 import type { ChoresPageData } from "../server";
 
@@ -47,7 +53,9 @@ export function ChoresRewardsView({
   const [busy, setBusy] = React.useState(false);
 
   const [choreOpen, setChoreOpen] = React.useState(false);
+  const [editingChoreId, setEditingChoreId] = React.useState<string | null>(null);
   const [rewardOpen, setRewardOpen] = React.useState(false);
+  const [editingRewardId, setEditingRewardId] = React.useState<string | null>(null);
   const [challengeOpen, setChallengeOpen] = React.useState(false);
 
   // Forms
@@ -112,20 +120,33 @@ export function ChoresRewardsView({
 
   const handleCreateChore = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
-    const res = await createChoreTemplateAction({
-      familyId,
-      title: choreTitle,
-      description: "",
-      defaultPoints: Number(chorePoints) || 10,
-      scheduleRule: choreSchedule,
-      category: "household",
-      assignedMemberId: choreAssignee || null,
-    });
+    const res = editingChoreId
+      ? await updateChoreTemplateAction({
+          familyId,
+          templateId: editingChoreId,
+          title: choreTitle,
+          description: "",
+          defaultPoints: Number(chorePoints) || 10,
+          scheduleRule: choreSchedule,
+          category: "household",
+          assignedMemberId: choreAssignee || null,
+        })
+      : await createChoreTemplateAction({
+          familyId,
+          title: choreTitle,
+          description: "",
+          defaultPoints: Number(chorePoints) || 10,
+          scheduleRule: choreSchedule,
+          category: "household",
+          assignedMemberId: choreAssignee || null,
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setChoreTitle("");
+      setEditingChoreId(null);
       setChoreOpen(false);
       toast.success(t("chores.addedToast"));
       router.refresh();
@@ -295,15 +316,57 @@ export function ChoresRewardsView({
                     {item.assigneeName && <Badge variant="sage">{item.assigneeName}</Badge>}
                   </div>
                 </div>
-                <Button
-                  variant="tonal"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => handleSubmitChore(item)}
-                >
-                  <Check className="h-4 w-4" />
-                  {t("chores.iDidItBtn")}
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  {data.canApproveChores && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${t("common.edit")} ${item.title}`}
+                        onClick={() => {
+                          setEditingChoreId(item.id);
+                          setChoreTitle(item.title);
+                          setChorePoints(String(item.defaultPoints));
+                          setChoreSchedule(item.scheduleRule as typeof choreSchedule);
+                          setChoreAssignee(
+                            data.members.find((m) => m.displayName === item.assigneeName)?.id ?? ""
+                          );
+                          setChoreOpen(true);
+                        }}
+                        className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${t("common.delete")} ${item.title}`}
+                        onClick={async () => {
+                          setBusy(true);
+                          const r = await deleteChoreTemplateAction({
+                            familyId,
+                            templateId: item.id,
+                          });
+                          setBusy(false);
+                          if (!r.ok) toast.error(te(r.error));
+                          else router.refresh();
+                        }}
+                        className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                      </button>
+                    </>
+                  )}
+                  <Button
+                    variant="tonal"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => handleSubmitChore(item)}
+                  >
+                    <Check className="h-4 w-4" />
+                    {t("chores.iDidItBtn")}
+                  </Button>
+                </div>
               </Card>
             ))
           )}
@@ -330,16 +393,55 @@ export function ChoresRewardsView({
                     <CardTitle className="pt-1">{r.title}</CardTitle>
                     {r.description && <CardDescription>{r.description}</CardDescription>}
                   </div>
-                  <Button
-                    disabled={busy || !data.canRedeemRewards || !canAfford}
-                    variant={canAfford ? "primary" : "secondary"}
-                    size="sm"
-                    onClick={() => handleRedeem(r.id, r.title)}
-                  >
-                    {canAfford
-                      ? t("chores.redeemBtn")
-                      : t("chores.needMorePts", { pts: r.costPoints - data.myPointsBalance })}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {data.canApproveChores && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          aria-label={`${t("common.edit")} ${r.title}`}
+                          onClick={() => {
+                            setEditingRewardId(r.id);
+                            setRewardTitle(r.title);
+                            setRewardCost(String(r.costPoints));
+                            setRewardOpen(true);
+                          }}
+                          className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          aria-label={`${t("common.delete")} ${r.title}`}
+                          onClick={async () => {
+                            setBusy(true);
+                            const res = await deleteRewardAction({
+                              familyId,
+                              rewardId: r.id,
+                            });
+                            setBusy(false);
+                            if (!res.ok) toast.error(te(res.error));
+                            else router.refresh();
+                          }}
+                          className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                        </button>
+                      </>
+                    )}
+                    <Button
+                      className="flex-1"
+                      disabled={busy || !data.canRedeemRewards || !canAfford}
+                      variant={canAfford ? "primary" : "secondary"}
+                      size="sm"
+                      onClick={() => handleRedeem(r.id, r.title)}
+                    >
+                      {canAfford
+                        ? t("chores.redeemBtn")
+                        : t("chores.needMorePts", { pts: r.costPoints - data.myPointsBalance })}
+                    </Button>
+                  </div>
                 </Card>
               );
             })
@@ -425,7 +527,14 @@ export function ChoresRewardsView({
       )}
 
       {/* Parent Modals */}
-      <BottomSheet open={choreOpen} onClose={() => setChoreOpen(false)} title={t("chores.modal.createChore")}>
+      <BottomSheet
+        open={choreOpen}
+        onClose={() => {
+          setChoreOpen(false);
+          setEditingChoreId(null);
+        }}
+        title={t("chores.modal.createChore")}
+      >
         <form onSubmit={handleCreateChore} className="space-y-4">
           <Input label={t("chores.modal.choreTitle")} required placeholder={t("chores.modal.chorePlaceholder")} value={choreTitle} onChange={(e) => setChoreTitle(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">
@@ -439,8 +548,41 @@ export function ChoresRewardsView({
         </form>
       </BottomSheet>
 
-      <BottomSheet open={rewardOpen} onClose={() => setRewardOpen(false)} title={t("chores.modal.addReward")}>
-        <form onSubmit={handleCreateReward} className="space-y-4">
+      <BottomSheet
+        open={rewardOpen}
+        onClose={() => {
+          setRewardOpen(false);
+          setEditingRewardId(null);
+        }}
+        title={t("chores.modal.addReward")}
+      >
+        <form
+          onSubmit={async (e) => {
+            if (!editingRewardId) {
+              await handleCreateReward(e);
+              return;
+            }
+            e.preventDefault();
+            if (busy) return;
+            setBusy(true);
+            const res = await updateRewardAction({
+              familyId,
+              rewardId: editingRewardId,
+              title: rewardTitle,
+              description: "",
+              costPoints: Number(rewardCost) || 50,
+            });
+            setBusy(false);
+            if (!res.ok) toast.error(te(res.error));
+            else {
+              setRewardTitle("");
+              setEditingRewardId(null);
+              setRewardOpen(false);
+              router.refresh();
+            }
+          }}
+          className="space-y-4"
+        >
           <Input label={t("chores.modal.rewardTitle")} required placeholder={t("chores.modal.rewardPlaceholder")} value={rewardTitle} onChange={(e) => setRewardTitle(e.target.value)} />
           <Input label={t("chores.modal.pointCost")} type="number" min={1} max={10000} value={rewardCost} onChange={(e) => setRewardCost(e.target.value)} />
           <Button type="submit" className="w-full" isLoading={busy}>{t("chores.modal.addRewardBtn")}</Button>

@@ -21,6 +21,7 @@ export type OfflineMutationStatus =
 export interface OfflineCacheEntry<T = unknown> {
   key: string; // `${familyId}:${domain}`
   familyId: string;
+  userId?: string | null;
   domain: OfflineCacheDomain;
   data: T;
   cachedAt: string;
@@ -30,6 +31,7 @@ export interface OfflineMutationRecord {
   id: string;
   idempotencyKey: string;
   familyId: string;
+  userId?: string | null;
   domain: OfflineSyncDomain;
   actionType: string;
   payload: Record<string, unknown>;

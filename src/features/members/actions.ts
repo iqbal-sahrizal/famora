@@ -122,7 +122,7 @@ export async function resendInvitationAction(params: {
     const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
 
     // Rotating token_hash invalidates any previous plaintext link
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("family_invitations")
       .update({
         token_hash: tokenHash,
@@ -130,10 +130,16 @@ export async function resendInvitationAction(params: {
         status: "pending",
       })
       .eq("id", parsed.data.invitationId)
-      .eq("family_id", parsed.data.familyId);
+      .eq("family_id", parsed.data.familyId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       return { ok: false, error: error.message };
+    }
+    if (!updated) {
+      return { ok: false, error: "Pending invitation not found or not authorized." };
     }
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "family"));
@@ -163,14 +169,19 @@ export async function revokeInvitationAction(params: {
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("family_invitations")
       .update({ status: "revoked" })
       .eq("id", parsed.data.invitationId)
       .eq("family_id", parsed.data.familyId)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!updated) {
+      return { ok: false, error: "Pending invitation not found or not authorized." };
+    }
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "family"));
     return { ok: true };
@@ -244,13 +255,18 @@ export async function updateMemberRoleAction(
 
     if (!role) return { ok: false, error: "Role not found." };
 
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("family_members")
       .update({ role_id: role.id })
       .eq("id", parsed.data.memberId)
-      .eq("family_id", parsed.data.familyId);
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!updated) {
+      return { ok: false, error: "Member not found or not authorized to update role." };
+    }
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "family"));
     return { ok: true };
@@ -273,13 +289,18 @@ export async function updateMemberStatusAction(
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("family_members")
       .update({ status: parsed.data.status })
       .eq("id", parsed.data.memberId)
-      .eq("family_id", parsed.data.familyId);
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!updated) {
+      return { ok: false, error: "Member not found or not authorized to update status." };
+    }
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "family"));
     return { ok: true };
@@ -303,13 +324,18 @@ export async function removeMemberAction(params: {
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("family_members")
       .update({ status: "removed" })
       .eq("id", parsed.data.memberId)
-      .eq("family_id", parsed.data.familyId);
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!updated) {
+      return { ok: false, error: "Member not found or not authorized to remove member." };
+    }
 
     revalidatePath(routes.familyDomain(parsed.data.familyId, "family"));
     return { ok: true };

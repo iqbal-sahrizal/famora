@@ -156,11 +156,27 @@ vi.mock("@/lib/supabase/server", () => ({
         }
         return {};
       }),
-      insert: vi.fn(async (payload: Record<string, unknown>) => {
+      insert: vi.fn((payload: Record<string, unknown>) => {
         if (table === "ai_usage_logs") {
           insertedUsageLogs.push(payload);
+          return Promise.resolve({ error: null });
         }
-        return { error: null };
+        if (table === "ai_conversations" || table === "ai_messages") {
+          return {
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({
+                data: { id: table === "ai_conversations" ? "conv-1" : "msg-1" },
+                error: null,
+              }),
+            }),
+            then: (resolve: (v: { error: null }) => void) =>
+              Promise.resolve({ error: null }).then(resolve),
+          };
+        }
+        return Promise.resolve({ error: null });
+      }),
+      update: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
       }),
     })),
   })),

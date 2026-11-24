@@ -23,9 +23,8 @@ import { useLocale } from "@/providers/locale-provider";
 import {
   cancelAiProposedAction,
   confirmAiProposedAction,
-  sendAiPromptAction,
 } from "../actions";
-import type { AiAssistantPageData, AiMessageItem } from "../types";
+import type { AiAssistantPageData, AiMessageItem, AiProposedAction } from "../types";
 import { AiMarkdown } from "./ai-markdown";
 
 export function FamilyAiView({
@@ -55,6 +54,7 @@ export function FamilyAiView({
   const [busy, setBusy] = React.useState(false);
   const [actionBusyId, setActionBusyId] = React.useState<string | null>(null);
   const [failedPrompt, setFailedPrompt] = React.useState<string | null>(null);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
   const threadRef = React.useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = React.useRef(true);
   const quotaExhausted = data.rateLimitRemaining <= 0;
@@ -91,6 +91,7 @@ export function FamilyAiView({
     isNearBottomRef.current = true;
 
     const optimisticId = `local-${Date.now()}`;
+    const streamingId = `stream-${Date.now()}`;
     const optimisticUser: AiMessageItem = {
       id: optimisticId,
       conversationId: activeConvId ?? "new",
@@ -103,28 +104,109 @@ export function FamilyAiView({
       modelName: "user",
       createdAt: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, optimisticUser]);
+    const streamingAssistant: AiMessageItem = {
+      id: streamingId,
+      conversationId: activeConvId ?? "new",
+      role: "assistant",
+      content: "",
+      toolCalls: [],
+      proposedAction: null,
+      actionStatus: "none",
+      providerName: "famora_stream",
+      modelName: "streaming",
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticUser, streamingAssistant]);
 
-    const res = await sendAiPromptAction({
-      familyId,
-      conversationId: activeConvId,
-      prompt: trimmed,
-    });
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    setBusy(false);
+    try {
+      const response = await fetch("/api/ai/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          familyId,
+          conversationId: activeConvId,
+          prompt: trimmed,
+        }),
+        signal: controller.signal,
+      });
 
-    if (!res.ok) {
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      if (!response.ok || !response.body) {
+        const errBody = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errBody.error || "Failed to reach AI assistant.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let resolvedConvId: string | null = activeConvId;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+
+        for (const ev of events) {
+          const line = ev.trim();
+          if (!line.startsWith("data:")) continue;
+          const payload = JSON.parse(line.slice(5).trim()) as {
+            type?: string;
+            chunk?: string;
+            conversationId?: string;
+            messageId?: string | null;
+            proposedAction?: AiProposedAction | null;
+          };
+          if (payload.type === "delta" && payload.chunk) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamingId
+                  ? { ...m, content: m.content + payload.chunk }
+                  : m
+              )
+            );
+          } else if (payload.type === "done") {
+            if (payload.conversationId) resolvedConvId = payload.conversationId;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamingId
+                  ? {
+                      ...m,
+                      id: payload.messageId ?? m.id,
+                      conversationId: payload.conversationId ?? m.conversationId,
+                      proposedAction: payload.proposedAction ?? null,
+                      actionStatus: payload.proposedAction
+                        ? "pending_confirmation"
+                        : "none",
+                    }
+                  : m
+              )
+            );
+          }
+        }
+      }
+
+      if (resolvedConvId) setActiveConvId(resolvedConvId);
+      setBusy(false);
+      abortControllerRef.current = null;
+      router.refresh();
+    } catch (err) {
+      abortControllerRef.current = null;
+      setBusy(false);
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== optimisticId && m.id !== streamingId)
+      );
       setFailedPrompt(trimmed);
       setPrompt(trimmed);
-      toast.error(te(res.error));
-      return;
+      if (err instanceof Error && err.name === "AbortError") {
+        toast.info(te("AI generation cancelled."));
+      } else {
+        toast.error(te(err instanceof Error ? err.message : "AI request failed."));
+      }
     }
-
-    if (res.conversationId) {
-      setActiveConvId(res.conversationId);
-    }
-    router.refresh();
   };
 
   return (
@@ -371,14 +453,24 @@ export function FamilyAiView({
               disabled={busy || quotaExhausted}
             />
           </div>
-          <Button
-            type="submit"
-            isLoading={busy}
-            disabled={busy || quotaExhausted || !prompt.trim()}
-            aria-label={t("chat.sendAria")}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          {busy ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => abortControllerRef.current?.abort()}
+              aria-label={t("common.cancel")}
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              disabled={quotaExhausted || !prompt.trim()}
+              aria-label={t("chat.sendAria")}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </form>
       </Card>
     </div>

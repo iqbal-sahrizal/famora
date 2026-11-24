@@ -70,14 +70,18 @@ export async function saveCalendarEventAction(
       reminder_minutes: parsed.data.reminderMinutes,
     };
 
+    const isEdit = Boolean(parsed.data.eventId);
     let eventId = parsed.data.eventId;
     if (eventId) {
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from("calendar_events")
         .update(payload)
         .eq("id", eventId)
-        .eq("family_id", parsed.data.familyId);
+        .eq("family_id", parsed.data.familyId)
+        .select("id")
+        .maybeSingle();
       if (error) return { ok: false, error: error.message };
+      if (!updated) return { ok: false, error: "Event not found or not authorized." };
     } else {
       const { data: inserted, error } = await supabase
         .from("calendar_events")
@@ -90,10 +94,24 @@ export async function saveCalendarEventAction(
       eventId = inserted.id;
     }
 
-    // Sync participants
+    // Sync participants while preserving existing RSVP statuses on edit
     const uniqueParticipants = Array.from(
       new Set(parsed.data.participantMemberIds)
     );
+    const existingRsvpMap = new Map<string, string>();
+    if (isEdit) {
+      const { data: existingParticipants } = await supabase
+        .from("calendar_event_participants")
+        .select("member_id, rsvp_status")
+        .eq("event_id", eventId);
+      for (const row of (existingParticipants as Array<{
+        member_id: string;
+        rsvp_status: string;
+      }>) ?? []) {
+        existingRsvpMap.set(row.member_id, row.rsvp_status);
+      }
+    }
+
     await supabase
       .from("calendar_event_participants")
       .delete()
@@ -105,13 +123,15 @@ export async function saveCalendarEventAction(
           family_id: parsed.data.familyId,
           event_id: eventId,
           member_id: memberId,
-          rsvp_status: memberId === actor.id ? "accepted" : "pending",
+          rsvp_status:
+            existingRsvpMap.get(memberId) ??
+            (memberId === actor.id ? "accepted" : "pending"),
         }))
       );
     }
 
-    // Schedule reminder notifications for participants (or creator)
-    if (parsed.data.reminderMinutes !== null) {
+    // Schedule reminder notifications on creation (avoid duplicate reminders on edits)
+    if (!isEdit && parsed.data.reminderMinutes !== null) {
       const remindAt = new Date(
         new Date(parsed.data.startAt).getTime() -
           parsed.data.reminderMinutes * 60 * 1000

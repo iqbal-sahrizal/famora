@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireAuthenticatedUser } from "@/features/auth/server";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -91,14 +92,24 @@ export async function updateAlbumSharingAction(input: {
   visibility: MemoryVisibility;
   sharedWithMemberIds: string[];
 }) {
-  const { supabase, actor, permSet } = await getActorContext(input.familyId);
+  const parsed = z
+    .object({
+      familyId: z.string().uuid(),
+      albumId: z.string().uuid(),
+      visibility: z.enum(["family", "adults_only", "private", "shared"]),
+      sharedWithMemberIds: z.array(z.string().uuid()).max(50),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid sharing settings." };
+
+  const { supabase, actor, permSet } = await getActorContext(parsed.data.familyId);
   if (!actor) return { ok: false, error: "Active membership required." };
 
   const { data: album } = await supabase
     .from("memory_albums")
     .select("id, created_by_member_id")
-    .eq("id", input.albumId)
-    .eq("family_id", input.familyId)
+    .eq("id", parsed.data.albumId)
+    .eq("family_id", parsed.data.familyId)
     .maybeSingle<{ id: string; created_by_member_id: string | null }>();
 
   if (!album) return { ok: false, error: "Album not found." };
@@ -106,17 +117,110 @@ export async function updateAlbumSharingAction(input: {
     return { ok: false, error: "Not authorized to update album sharing." };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("memory_albums")
     .update({
-      visibility: input.visibility,
+      visibility: parsed.data.visibility,
       shared_with_member_ids:
-        input.visibility === "shared" ? input.sharedWithMemberIds : [],
+        parsed.data.visibility === "shared" ? parsed.data.sharedWithMemberIds : [],
     })
-    .eq("id", input.albumId);
+    .eq("id", parsed.data.albumId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
 
   if (error) return { ok: false, error: error.message };
-  revalidatePath(routes.familyDomain(input.familyId, "memories"));
+  if (!updated) return { ok: false, error: "Album not found." };
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "memories"));
+  return { ok: true };
+}
+
+export async function updateAlbumAction(input: {
+  familyId: string;
+  albumId: string;
+  title: string;
+  description?: string;
+  eventName?: string;
+}) {
+  const parsed = z
+    .object({
+      familyId: z.string().uuid(),
+      albumId: z.string().uuid(),
+      title: z.string().trim().min(1).max(120),
+      description: z.string().trim().max(500).optional(),
+      eventName: z.string().trim().max(120).optional(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid album details." };
+
+  const { supabase, actor, permSet } = await getActorContext(parsed.data.familyId);
+  if (!actor) return { ok: false, error: "Active membership required." };
+
+  const { data: album } = await supabase
+    .from("memory_albums")
+    .select("id, created_by_member_id")
+    .eq("id", parsed.data.albumId)
+    .eq("family_id", parsed.data.familyId)
+    .maybeSingle<{ id: string; created_by_member_id: string | null }>();
+
+  if (!album) return { ok: false, error: "Album not found." };
+  if (album.created_by_member_id !== actor.id && !permSet.has("memories.manage")) {
+    return { ok: false, error: "Not authorized to update this album." };
+  }
+
+  const { data: updated, error } = await supabase
+    .from("memory_albums")
+    .update({
+      title: parsed.data.title,
+      description: parsed.data.description ?? "",
+      event_name: parsed.data.eventName ?? "",
+    })
+    .eq("id", parsed.data.albumId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!updated) return { ok: false, error: "Album not found." };
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "memories"));
+  return { ok: true };
+}
+
+export async function deleteAlbumAction(params: {
+  familyId: string;
+  albumId: string;
+}) {
+  const parsed = z
+    .object({ familyId: z.string().uuid(), albumId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid album reference." };
+
+  const { supabase, actor, permSet } = await getActorContext(parsed.data.familyId);
+  if (!actor) return { ok: false, error: "Active membership required." };
+
+  const { data: album } = await supabase
+    .from("memory_albums")
+    .select("id, created_by_member_id")
+    .eq("id", parsed.data.albumId)
+    .eq("family_id", parsed.data.familyId)
+    .maybeSingle<{ id: string; created_by_member_id: string | null }>();
+
+  if (!album) return { ok: false, error: "Album not found." };
+  if (album.created_by_member_id !== actor.id && !permSet.has("memories.manage")) {
+    return { ok: false, error: "Not authorized to delete this album." };
+  }
+
+  const { data: deleted, error } = await supabase
+    .from("memory_albums")
+    .delete()
+    .eq("id", parsed.data.albumId)
+    .eq("family_id", parsed.data.familyId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!deleted) return { ok: false, error: "Album not found." };
+  revalidatePath(routes.familyDomain(parsed.data.familyId, "memories"));
   return { ok: true };
 }
 

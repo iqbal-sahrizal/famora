@@ -110,3 +110,28 @@ export const uploadChildAttachmentMetaSchema = z.object({
   recordType: z.enum(["health", "education", "milestone"]),
   notes: z.string().trim().max(500).default(""),
 });
+
+export const updateChildProfileSchema = createChildProfileSchema.extend({
+  profileId: z.string().uuid(),
+});
+
+export const updateGrowthRecordSchema = addGrowthRecordSchema
+  .omit({ childProfileId: true })
+  .extend({ recordId: z.string().uuid() });
+
+export const updateMilestoneSchema = addMilestoneSchema
+  .omit({ childProfileId: true })
+  .extend({ milestoneId: z.string().uuid() });
+
+export const updateEducationRecordSchema = addEducationRecordSchema
+  .omit({ childProfileId: true })
+  .extend({ recordId: z.string().uuid() });
+
+export const updateHealthRecordSchema = addHealthRecordSchema
+  .omit({ childProfileId: true })
+  .extend({ recordId: z.string().uuid() });
+
+export const deleteChildRecordSchema = z.object({
+  familyId: z.string().uuid(),
+  id: z.string().uuid(),
+});

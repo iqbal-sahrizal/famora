@@ -6,9 +6,11 @@ import {
   Check,
   Home,
   Lock,
+  Pencil,
   Phone,
   Plus,
   ShieldCheck,
+  Trash2,
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,6 +30,12 @@ import {
   createHomeAssetAction,
   createMaintenanceTaskAction,
   createServiceProviderAction,
+  deleteHomeAssetAction,
+  deleteMaintenanceTaskAction,
+  deleteServiceProviderAction,
+  updateHomeAssetAction,
+  updateMaintenanceTaskAction,
+  updateServiceProviderAction,
 } from "../actions";
 import type { getHomePageData } from "../server";
 
@@ -42,8 +50,11 @@ export function HomeManagementView({
   const { locale, t, te } = useLocale();
   const [tab, setTab] = React.useState<"maintenance" | "assets" | "providers" | "history">("maintenance");
   const [assetOpen, setAssetOpen] = React.useState(false);
+  const [editingAssetId, setEditingAssetId] = React.useState<string | null>(null);
   const [maintOpen, setMaintOpen] = React.useState(false);
+  const [editingMaintId, setEditingMaintId] = React.useState<string | null>(null);
   const [provOpen, setProvOpen] = React.useState(false);
+  const [editingProvId, setEditingProvId] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   const [aName, setAName] = React.useState("");
@@ -126,27 +137,59 @@ export function HomeManagementView({
                     })}
                   </CardDescription>
                 </div>
-                <Button
-                  size="sm"
-                  variant="tonal"
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    const r = await completeMaintenanceTaskAction({
-                      familyId,
-                      taskId: task.id,
-                      intervalDays: task.intervalDays,
-                    });
-                    setBusy(false);
-                    if (r.ok) {
-                      toast.success(t("home.completedToast"));
-                      router.refresh();
-                    } else toast.error(te(r.error));
-                  }}
-                >
-                  <Check className="h-4 w-4" />
-                  {t("home.markDoneBtn")}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={`${t("common.edit")} ${task.title}`}
+                    onClick={() => {
+                      setEditingMaintId(task.id);
+                      setMTitle(task.title);
+                      setMInterval(String(task.intervalDays));
+                      setMDue(task.nextDueOn);
+                      setMaintOpen(true);
+                    }}
+                    className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={`${t("common.delete")} ${task.title}`}
+                    onClick={async () => {
+                      setBusy(true);
+                      const r = await deleteMaintenanceTaskAction({ familyId, id: task.id });
+                      setBusy(false);
+                      if (!r.ok) toast.error(te(r.error));
+                      else router.refresh();
+                    }}
+                    className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                  </button>
+                  <Button
+                    size="sm"
+                    variant="tonal"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      const r = await completeMaintenanceTaskAction({
+                        familyId,
+                        taskId: task.id,
+                        intervalDays: task.intervalDays,
+                      });
+                      setBusy(false);
+                      if (r.ok) {
+                        toast.success(t("home.completedToast"));
+                        router.refresh();
+                      } else toast.error(te(r.error));
+                    }}
+                  >
+                    <Check className="h-4 w-4" />
+                    {t("home.markDoneBtn")}
+                  </Button>
+                </div>
               </Card>
             ))
           )}
@@ -162,13 +205,48 @@ export function HomeManagementView({
           ) : (
             data.assets.map((a) => (
               <Card key={a.id} className="space-y-2 p-5">
-                <div className="flex items-center justify-between">
-                  <Badge variant="sage">{t(`home.cat.${a.category}` as "home.cat.appliance")}</Badge>
-                  {a.warrantyExpiresOn && (
-                    <Badge variant="lavender" className="tabular-nums">
-                      <ShieldCheck className="h-3 w-3" /> {t("home.warrantyLabel", { date: formatLocalizedDate(a.warrantyExpiresOn, locale) })}
-                    </Badge>
-                  )}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="sage">{t(`home.cat.${a.category}` as "home.cat.appliance")}</Badge>
+                    {a.warrantyExpiresOn && (
+                      <Badge variant="lavender" className="tabular-nums">
+                        <ShieldCheck className="h-3 w-3" /> {t("home.warrantyLabel", { date: formatLocalizedDate(a.warrantyExpiresOn, locale) })}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`${t("common.edit")} ${a.name}`}
+                      onClick={() => {
+                        setEditingAssetId(a.id);
+                        setAName(a.name);
+                        setACat(a.category as typeof aCat);
+                        setAModel(a.brandModel ?? "");
+                        setAWarranty(a.warrantyExpiresOn ?? "");
+                        setAssetOpen(true);
+                      }}
+                      className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`${t("common.delete")} ${a.name}`}
+                      onClick={async () => {
+                        setBusy(true);
+                        const r = await deleteHomeAssetAction({ familyId, id: a.id });
+                        setBusy(false);
+                        if (!r.ok) toast.error(te(r.error));
+                        else router.refresh();
+                      }}
+                      className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                    </button>
+                  </div>
                 </div>
                 <CardTitle>{a.name}</CardTitle>
                 {a.brandModel && <CardDescription>{a.brandModel}</CardDescription>}
@@ -187,7 +265,41 @@ export function HomeManagementView({
           ) : (
             data.providers.map((p) => (
               <Card key={p.id} className="space-y-1.5 p-5">
-                <Badge variant="neutral">{p.specialty || t("home.contractorDefault")}</Badge>
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant="neutral">{p.specialty || t("home.contractorDefault")}</Badge>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`${t("common.edit")} ${p.name}`}
+                      onClick={() => {
+                        setEditingProvId(p.id);
+                        setPrName(p.name);
+                        setPrSpec(p.specialty ?? "");
+                        setPrPhone(p.phone ?? "");
+                        setProvOpen(true);
+                      }}
+                      className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`${t("common.delete")} ${p.name}`}
+                      onClick={async () => {
+                        setBusy(true);
+                        const r = await deleteServiceProviderAction({ familyId, id: p.id });
+                        setBusy(false);
+                        if (!r.ok) toast.error(te(r.error));
+                        else router.refresh();
+                      }}
+                      className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                    </button>
+                  </div>
+                </div>
                 <CardTitle>{p.name}</CardTitle>
                 <CardDescription>{p.phone || p.email}</CardDescription>
               </Card>
@@ -211,13 +323,15 @@ export function HomeManagementView({
         </Card>
       )}
 
-      <BottomSheet open={assetOpen} onClose={() => setAssetOpen(false)} title={t("home.modal.assetTitle")}>
+      <BottomSheet open={assetOpen} onClose={() => { setAssetOpen(false); setEditingAssetId(null); }} title={t("home.modal.assetTitle")}>
         <form onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
-          const r = await createHomeAssetAction({ familyId, name: aName, category: aCat, brandModel: aModel, purchasedOn: null, warrantyExpiresOn: aWarranty || null });
+          const r = editingAssetId
+            ? await updateHomeAssetAction({ familyId, assetId: editingAssetId, name: aName, category: aCat, brandModel: aModel, purchasedOn: null, warrantyExpiresOn: aWarranty || null })
+            : await createHomeAssetAction({ familyId, name: aName, category: aCat, brandModel: aModel, purchasedOn: null, warrantyExpiresOn: aWarranty || null });
           setBusy(false);
-          if (r.ok) { setAName(""); setAssetOpen(false); toast.success(t("home.assetAddedToast")); router.refresh(); }
+          if (r.ok) { setAName(""); setAModel(""); setAWarranty(""); setEditingAssetId(null); setAssetOpen(false); toast.success(t("home.assetAddedToast")); router.refresh(); }
           else toast.error(te(r.error));
         }} className="space-y-4">
           <Input label={t("home.modal.assetName")} required placeholder={t("home.modal.assetPlaceholder")} value={aName} onChange={(e) => setAName(e.target.value)} />
@@ -228,13 +342,15 @@ export function HomeManagementView({
         </form>
       </BottomSheet>
 
-      <BottomSheet open={maintOpen} onClose={() => setMaintOpen(false)} title={t("home.modal.maintTitle")}>
+      <BottomSheet open={maintOpen} onClose={() => { setMaintOpen(false); setEditingMaintId(null); }} title={t("home.modal.maintTitle")}>
         <form onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
-          const r = await createMaintenanceTaskAction({ familyId, assetId: null, providerId: null, title: mTitle, intervalDays: Number(mInterval) || 90, nextDueOn: mDue, syncToCalendar: true });
+          const r = editingMaintId
+            ? await updateMaintenanceTaskAction({ familyId, taskId: editingMaintId, assetId: null, providerId: null, title: mTitle, intervalDays: Number(mInterval) || 90, nextDueOn: mDue })
+            : await createMaintenanceTaskAction({ familyId, assetId: null, providerId: null, title: mTitle, intervalDays: Number(mInterval) || 90, nextDueOn: mDue, syncToCalendar: true });
           setBusy(false);
-          if (r.ok) { setMTitle(""); setMaintOpen(false); toast.success(t("home.maintScheduledToast")); router.refresh(); }
+          if (r.ok) { setMTitle(""); setEditingMaintId(null); setMaintOpen(false); toast.success(t("home.maintScheduledToast")); router.refresh(); }
           else toast.error(te(r.error));
         }} className="space-y-4">
           <Input label={t("home.modal.maintTask")} required placeholder={t("home.modal.maintPlaceholder")} value={mTitle} onChange={(e) => setMTitle(e.target.value)} />
@@ -246,13 +362,15 @@ export function HomeManagementView({
         </form>
       </BottomSheet>
 
-      <BottomSheet open={provOpen} onClose={() => setProvOpen(false)} title={t("home.modal.provTitle")}>
+      <BottomSheet open={provOpen} onClose={() => { setProvOpen(false); setEditingProvId(null); }} title={t("home.modal.provTitle")}>
         <form onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
-          const r = await createServiceProviderAction({ familyId, name: prName, specialty: prSpec, phone: prPhone, email: "" });
+          const r = editingProvId
+            ? await updateServiceProviderAction({ familyId, providerId: editingProvId, name: prName, specialty: prSpec, phone: prPhone, email: "" })
+            : await createServiceProviderAction({ familyId, name: prName, specialty: prSpec, phone: prPhone, email: "" });
           setBusy(false);
-          if (r.ok) { setPrName(""); setProvOpen(false); toast.success(t("home.provSavedToast")); router.refresh(); }
+          if (r.ok) { setPrName(""); setPrSpec(""); setPrPhone(""); setEditingProvId(null); setProvOpen(false); toast.success(t("home.provSavedToast")); router.refresh(); }
           else toast.error(te(r.error));
         }} className="space-y-4">
           <Input label={t("home.modal.provName")} required placeholder={t("home.modal.provPlaceholder")} value={prName} onChange={(e) => setPrName(e.target.value)} />

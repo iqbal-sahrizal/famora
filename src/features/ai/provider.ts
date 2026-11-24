@@ -201,6 +201,7 @@ export async function generateAiAssistantResponse(params: {
   prompt: string;
   context: AuthorizedFamilyContext;
   permissions: Set<PermissionKey>;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
 }): Promise<AiGenerationResult> {
   const local = buildLocalContextResponse(params);
 
@@ -211,6 +212,10 @@ export async function generateAiAssistantResponse(params: {
       const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
       const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
       const sanitizedContext = buildSanitizedPromptContext(params.context);
+      const priorMessages = (params.history ?? []).slice(-10).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
 
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
@@ -224,11 +229,12 @@ export async function generateAiAssistantResponse(params: {
             {
               role: "system",
               content:
-                "You are Famora AI, a warm, concise family assistant. Answer using ONLY the authorized JSON context provided. Never invent numbers or expose restricted data. Reply in the same language as the user (Indonesian or English).",
+                `You are Famora AI, a warm, concise family assistant. Answer using ONLY the authorized JSON context provided. Never invent numbers or expose restricted data. Reply in the same language as the user (Indonesian or English).\n\nAuthorized Context:\n${JSON.stringify(sanitizedContext)}`,
             },
+            ...priorMessages,
             {
               role: "user",
-              content: `Authorized Context:\n${JSON.stringify(sanitizedContext)}\n\nUser Question: ${params.prompt}`,
+              content: params.prompt,
             },
           ],
           temperature: 0.3,

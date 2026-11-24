@@ -40,9 +40,10 @@ export async function getWorkspaceShellContext(
         .maybeSingle<{ full_name: string }>(),
       supabase
         .from("family_members")
-        .select("family_id, families!inner(id, name), family_roles!inner(role_key)")
+        .select("family_id, families!inner(id, name, deleted_at), family_roles!inner(role_key)")
         .eq("user_id", user.id)
-        .eq("status", "active"),
+        .eq("status", "active")
+        .is("families.deleted_at", null),
     ]);
 
     const families: WorkspaceFamilyOption[] = (

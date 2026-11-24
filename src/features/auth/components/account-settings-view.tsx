@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { clearOfflineCache } from "@/lib/pwa/indexeddb";
+import { clearAllPwaStorage } from "@/lib/pwa/indexeddb";
 import { routes } from "@/lib/routes";
 import { useLocale } from "@/providers/locale-provider";
 import { logoutAction, updateProfileAction } from "../actions";
@@ -58,9 +58,11 @@ export function AccountSettingsView({
     const result = await logoutAction();
     setSigningOut(false);
     if (result.ok) {
-      await clearOfflineCache().catch(() => undefined);
+      await clearAllPwaStorage().catch(() => undefined);
       router.push(routes.login);
       router.refresh();
+    } else {
+      toast.error(te(result.error));
     }
   };
 

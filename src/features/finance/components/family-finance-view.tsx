@@ -117,6 +117,15 @@ export function FamilyFinanceView({
   const [txAttachment, setTxAttachment] = React.useState("");
   const [selectedTx, setSelectedTx] = React.useState<FinanceTransactionItem | null>(null);
 
+  React.useEffect(() => {
+    if (!activeAccounts.some((a) => a.id === txAccountId)) {
+      setTxAccountId(activeAccounts[0]?.id ?? "");
+    }
+    if (!activeAccounts.some((a) => a.id === txTransferDst)) {
+      setTxTransferDst(activeAccounts[1]?.id ?? activeAccounts[0]?.id ?? "");
+    }
+  }, [activeAccounts, txAccountId, txTransferDst]);
+
   if (!data.authorized) {
     return (
       <Section>
@@ -375,7 +384,7 @@ export function FamilyFinanceView({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          aria-label={`Edit ${acc.name}`}
+                          aria-label={`${t("common.edit")} ${acc.name}`}
                           onClick={() => openEditAccount(acc)}
                         >
                           <Pencil className="h-3.5 w-3.5" />

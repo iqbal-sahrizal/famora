@@ -128,3 +128,106 @@ export async function recordDebtPaymentAction(
     return { ok: false, error: err instanceof Error ? err.message : "Payment failed." };
   }
 }
+
+async function hasTxManagePerm(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  familyId: string
+): Promise<boolean> {
+  const { data } = await supabase.rpc("get_my_family_permissions", {
+    p_family_id: familyId,
+  });
+  return ((data as Array<{ permission_key: string }>) ?? []).some(
+    (p) => p.permission_key === "finance.transactions.manage"
+  );
+}
+
+export async function updateFinanceGoalAction(
+  input: z.infer<typeof createGoalSchema> & { goalId: string }
+) {
+  await requireAuthenticatedUser();
+  const parsed = createGoalSchema.extend({ goalId: z.string().uuid() }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid savings goal." };
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (!(await hasTxManagePerm(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "Missing permission: finance.transactions.manage" };
+    }
+    const { data: updated, error } = await supabase
+      .from("finance_goals")
+      .update({
+        title: parsed.data.title,
+        target_numeric: parsed.data.targetNumeric,
+        target_date: parsed.data.targetDate,
+      })
+      .eq("id", parsed.data.goalId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!updated) return { ok: false, error: "Goal not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "analytics"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update goal." };
+  }
+}
+
+export async function deleteFinanceGoalAction(params: {
+  familyId: string;
+  goalId: string;
+}) {
+  await requireAuthenticatedUser();
+  const parsed = z
+    .object({ familyId: z.string().uuid(), goalId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid goal reference." };
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (!(await hasTxManagePerm(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "Missing permission: finance.transactions.manage" };
+    }
+    const { data: deleted, error } = await supabase
+      .from("finance_goals")
+      .delete()
+      .eq("id", parsed.data.goalId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Goal not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "analytics"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete goal." };
+  }
+}
+
+export async function deleteDebtReceivableAction(params: {
+  familyId: string;
+  debtId: string;
+}) {
+  await requireAuthenticatedUser();
+  const parsed = z
+    .object({ familyId: z.string().uuid(), debtId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid debt reference." };
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (!(await hasTxManagePerm(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "Missing permission: finance.transactions.manage" };
+    }
+    const { data: deleted, error } = await supabase
+      .from("finance_debts_receivables")
+      .delete()
+      .eq("id", parsed.data.debtId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Record not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "analytics"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete record." };
+  }
+}

@@ -12,6 +12,7 @@ export interface ChildProfileItem {
 
 export interface ChildDevPageData {
   canViewIdentity: boolean;
+  canManageProfiles: boolean;
   canManageGrowthMilestones: boolean;
   canViewHealth: boolean;
   profiles: ChildProfileItem[];
@@ -64,6 +65,7 @@ export interface ChildDevPageData {
 export async function getChildDevPageData(familyId: string): Promise<ChildDevPageData> {
   const denied: ChildDevPageData = {
     canViewIdentity: false,
+    canManageProfiles: false,
     canManageGrowthMilestones: false,
     canViewHealth: false,
     profiles: [],
@@ -86,6 +88,7 @@ export async function getChildDevPageData(familyId: string): Promise<ChildDevPag
     );
 
     const canViewIdentity = permSet.has("child_dev.identity.view");
+    const canManageProfiles = permSet.has("child_dev.manage");
     const canManageGrowthMilestones = permSet.has("child_dev.growth_milestones.manage");
     const canViewHealth = permSet.has("child_dev.health.view");
 
@@ -135,6 +138,7 @@ export async function getChildDevPageData(familyId: string): Promise<ChildDevPag
 
     return {
       canViewIdentity,
+      canManageProfiles,
       canManageGrowthMilestones,
       canViewHealth,
       profiles: (profilesData ?? []).map((p) => ({

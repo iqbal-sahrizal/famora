@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuthenticatedUser } from "@/features/auth/server";
+import { toggleTaskStatusAction } from "@/features/tasks/actions";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { PermissionKey } from "@/types/domain";
@@ -23,11 +24,36 @@ const toggleShoppingSchema = z.object({
   isChecked: z.boolean(),
 });
 
+async function getDashboardActorContext(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  familyId: string,
+  userId: string
+) {
+  const [{ data: actor }, { data: perms }] = await Promise.all([
+    supabase
+      .from("family_members")
+      .select("id")
+      .eq("family_id", familyId)
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle<{ id: string }>(),
+    supabase.rpc("get_my_family_permissions", {
+      p_family_id: familyId,
+    }),
+  ]);
+  const permSet = new Set(
+    ((perms as Array<{ permission_key: PermissionKey }>) ?? []).map(
+      (p) => p.permission_key
+    )
+  );
+  return { actorId: actor?.id ?? null, permSet };
+}
+
 export async function quickAddTaskAction(input: {
   familyId: string;
   title: string;
 }) {
-  await requireAuthenticatedUser();
+  const user = await requireAuthenticatedUser();
   const parsed = quickTaskSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid task." };
@@ -35,13 +61,27 @@ export async function quickAddTaskAction(input: {
 
   try {
     const supabase = await createSupabaseServerClient();
+    const { actorId, permSet } = await getDashboardActorContext(
+      supabase,
+      parsed.data.familyId,
+      user.id
+    );
+    if (!actorId) {
+      return { ok: false, error: "Active family membership required." };
+    }
+    if (!permSet.has("tasks.manage_all")) {
+      return { ok: false, error: "Missing permission: tasks.manage_all" };
+    }
+
     const { error } = await supabase.from("tasks").insert({
       family_id: parsed.data.familyId,
       title: parsed.data.title,
       status: "todo",
+      created_by_member_id: actorId,
     });
     if (error) return { ok: false, error: error.message };
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "tasks"));
     return { ok: true };
   } catch (err) {
     return {
@@ -55,7 +95,7 @@ export async function quickAddShoppingItemAction(input: {
   familyId: string;
   name: string;
 }) {
-  await requireAuthenticatedUser();
+  const user = await requireAuthenticatedUser();
   const parsed = quickShoppingSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid item." };
@@ -63,12 +103,26 @@ export async function quickAddShoppingItemAction(input: {
 
   try {
     const supabase = await createSupabaseServerClient();
+    const { actorId, permSet } = await getDashboardActorContext(
+      supabase,
+      parsed.data.familyId,
+      user.id
+    );
+    if (!actorId) {
+      return { ok: false, error: "Active family membership required." };
+    }
+    if (!permSet.has("shopping.manage")) {
+      return { ok: false, error: "Missing permission: shopping.manage" };
+    }
+
     const { error } = await supabase.from("shopping_items").insert({
       family_id: parsed.data.familyId,
       name: parsed.data.name,
+      added_by_member_id: actorId,
     });
     if (error) return { ok: false, error: error.message };
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
     return { ok: true };
   } catch (err) {
     return {
@@ -83,7 +137,7 @@ export async function toggleShoppingItemAction(input: {
   itemId: string;
   isChecked: boolean;
 }) {
-  await requireAuthenticatedUser();
+  const user = await requireAuthenticatedUser();
   const parsed = toggleShoppingSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Invalid shopping item." };
@@ -91,14 +145,35 @@ export async function toggleShoppingItemAction(input: {
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase
+    const { actorId, permSet } = await getDashboardActorContext(
+      supabase,
+      parsed.data.familyId,
+      user.id
+    );
+    if (!actorId) {
+      return { ok: false, error: "Active family membership required." };
+    }
+    if (!permSet.has("shopping.manage")) {
+      return { ok: false, error: "Missing permission: shopping.manage" };
+    }
+
+    const { data: updated, error } = await supabase
       .from("shopping_items")
-      .update({ is_checked: parsed.data.isChecked })
+      .update({
+        is_checked: parsed.data.isChecked,
+        checked_by_member_id: parsed.data.isChecked ? actorId : null,
+        checked_at: parsed.data.isChecked ? new Date().toISOString() : null,
+      })
       .eq("id", parsed.data.itemId)
-      .eq("family_id", parsed.data.familyId);
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!updated) return { ok: false, error: "Shopping item not found." };
+
     revalidatePath(routes.familyDashboard(parsed.data.familyId));
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
     return { ok: true };
   } catch (err) {
     return {
@@ -117,95 +192,14 @@ export async function quickCompleteTaskAction(input: {
   familyId: string;
   taskId: string;
 }) {
-  const user = await requireAuthenticatedUser();
   const parsed = quickCompleteTaskSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Invalid task." };
   }
 
-  try {
-    const supabase = await createSupabaseServerClient();
-    const [{ data: actor }, { data: perms }, { data: task }] = await Promise.all([
-      supabase
-        .from("family_members")
-        .select("id")
-        .eq("family_id", parsed.data.familyId)
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .maybeSingle<{ id: string }>(),
-      supabase.rpc("get_my_family_permissions", {
-        p_family_id: parsed.data.familyId,
-      }),
-      supabase
-        .from("tasks")
-        .select("id, family_id, assigned_member_id")
-        .eq("id", parsed.data.taskId)
-        .eq("family_id", parsed.data.familyId)
-        .maybeSingle<{
-          id: string;
-          family_id: string;
-          assigned_member_id: string | null;
-        }>(),
-    ]);
-
-    if (!actor) {
-      return { ok: false, error: "Active family membership required." };
-    }
-    if (!task) {
-      return { ok: false, error: "Task not found." };
-    }
-
-    const permSet = new Set(
-      ((perms as Array<{ permission_key: PermissionKey }>) ?? []).map(
-        (p) => p.permission_key
-      )
-    );
-    let canComplete =
-      permSet.has("tasks.manage_all") || task.assigned_member_id === actor.id;
-
-    if (!canComplete) {
-      const { data: assigneeRow } = await supabase
-        .from("task_assignees")
-        .select("member_id")
-        .eq("task_id", task.id)
-        .eq("member_id", actor.id)
-        .maybeSingle<{ member_id: string }>();
-      canComplete = Boolean(assigneeRow);
-    }
-
-    if (!canComplete) {
-      return {
-        ok: false,
-        error: "You do not have permission to complete this task.",
-      };
-    }
-
-    const { error } = await supabase
-      .from("tasks")
-      .update({
-        status: "done",
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", parsed.data.taskId)
-      .eq("family_id", parsed.data.familyId);
-
-    if (error) return { ok: false, error: error.message };
-
-    await supabase.from("task_history").insert({
-      family_id: parsed.data.familyId,
-      task_id: parsed.data.taskId,
-      actor_member_id: actor.id,
-      action: "completed",
-      details: { source: "dashboard_quick_complete" },
-    });
-
-    revalidatePath(routes.familyDashboard(parsed.data.familyId));
-    revalidatePath(routes.familyDomain(parsed.data.familyId, "tasks"));
-    return { ok: true };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "Could not complete task.",
-    };
-  }
+  return toggleTaskStatusAction({
+    familyId: parsed.data.familyId,
+    taskId: parsed.data.taskId,
+    nextStatus: "done",
+  });
 }

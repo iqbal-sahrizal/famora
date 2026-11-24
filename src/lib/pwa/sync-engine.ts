@@ -51,6 +51,13 @@ export function isAuthExpiredErrorMessage(msg: string | undefined): boolean {
   );
 }
 
+export function isPermanentOfflineError(msg: string | undefined): boolean {
+  if (!msg) return false;
+  return /(missing permission|do not have permission|not authorized|forbidden|not an active member|not found|invalid .* reference|cannot .* archived)/i.test(
+    msg
+  );
+}
+
 export type ConflictDecision =
   | { resolution: "apply_client" }
   | { resolution: "server_wins"; reason: string }
@@ -322,6 +329,14 @@ export async function flushOfflineOutbox(params: {
           lastError: res.error ?? "Conflict detected.",
         });
         conflicts += 1;
+      } else if (isPermanentOfflineError(res.error)) {
+        await putOutboxRecord({
+          ...record,
+          status: "failed",
+          attempts: record.maxAttempts,
+          lastError: res.error ?? "Mutation rejected permanently.",
+        });
+        failed += 1;
       } else {
         const nextAttempts = record.attempts + 1;
         const delayMs = computeSyncBackoffMs(nextAttempts);

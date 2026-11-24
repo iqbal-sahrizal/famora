@@ -28,10 +28,10 @@ import { EmptyState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
-import { useOnlineStatus } from "@/hooks/use-online-status";
+import { OfflineCacheBanner } from "@/components/pwa/offline-cache-banner";
+import { useOfflineCachedData } from "@/hooks/use-offline-cached-data";
 import { toIntlLocale } from "@/lib/i18n";
 import { useLocale } from "@/providers/locale-provider";
-import { writeOfflineCache } from "@/lib/pwa/indexeddb";
 import { enqueueOfflineMutation } from "@/lib/pwa/sync-engine";
 import { cn } from "@/lib/utils";
 import {
@@ -103,7 +103,22 @@ export function FamilyCalendarView({
   const router = useRouter();
   const { locale, t, te } = useLocale();
   const intlLocale = toIntlLocale(locale);
-  const isOnline = useOnlineStatus();
+  const isCalendarEmpty = React.useCallback(
+    (d: CalendarPageData) => d.events.length === 0 && d.members.length === 0,
+    []
+  );
+  const {
+    effectiveData,
+    isFromCache,
+    isCacheExpired,
+    cachedAt,
+    isOnline,
+  } = useOfflineCachedData({
+    familyId,
+    domain: "calendar",
+    serverData: data,
+    isEmptyData: isCalendarEmpty,
+  });
   const [viewMode, setViewMode] = React.useState<ViewMode>("month");
 
   React.useEffect(() => {
@@ -111,12 +126,6 @@ export function FamilyCalendarView({
       setViewMode("agenda");
     }
   }, []);
-
-  React.useEffect(() => {
-    if (isOnline && data.events) {
-      void writeOfflineCache(familyId, "calendar", data);
-    }
-  }, [familyId, isOnline, data]);
   const [anchorDate, setAnchorDate] = React.useState(() => new Date());
   const [selectedEvent, setSelectedEvent] =
     React.useState<ExpandedCalendarOccurrence | null>(null);
@@ -141,6 +150,7 @@ export function FamilyCalendarView({
   >("forest");
   const [recurrenceRule, setRecurrenceRule] =
     React.useState<RecurrenceRule>(null);
+  const [recurrenceUntil, setRecurrenceUntil] = React.useState("");
   const [reminderMinutes, setReminderMinutes] = React.useState<string>("30");
   const [participants, setParticipants] = React.useState<string[]>([]);
 
@@ -150,8 +160,8 @@ export function FamilyCalendarView({
   );
 
   const occurrences = React.useMemo(
-    () => expandCalendarEvents(data.events, rangeStart, rangeEnd),
-    [data.events, rangeStart, rangeEnd]
+    () => expandCalendarEvents(effectiveData.events, rangeStart, rangeEnd),
+    [effectiveData.events, rangeStart, rangeEnd]
   );
 
   const stepDate = (dir: -1 | 1) => {
@@ -176,6 +186,7 @@ export function FamilyCalendarView({
     setCategory("family");
     setColorToken("forest");
     setRecurrenceRule(null);
+    setRecurrenceUntil("");
     setReminderMinutes("30");
     setParticipants(data.currentMemberId ? [data.currentMemberId] : []);
     setEditorOpen(true);
@@ -197,6 +208,7 @@ export function FamilyCalendarView({
     setCategory(ev.category);
     setColorToken(ev.colorToken);
     setRecurrenceRule(ev.recurrenceRule);
+    setRecurrenceUntil(ev.recurrenceUntil ? ev.recurrenceUntil.slice(0, 10) : "");
     setReminderMinutes(
       ev.reminderMinutes !== null ? String(ev.reminderMinutes) : ""
     );
@@ -233,7 +245,7 @@ export function FamilyCalendarView({
           category,
           colorToken,
           recurrenceRule,
-          recurrenceUntil: null,
+          recurrenceUntil: recurrenceRule && recurrenceUntil ? `${recurrenceUntil}T23:59:59Z` : null,
           reminderMinutes: reminderMinutes ? Number(reminderMinutes) : null,
           participantMemberIds: participants,
         },
@@ -258,7 +270,7 @@ export function FamilyCalendarView({
       category,
       colorToken,
       recurrenceRule,
-      recurrenceUntil: null,
+      recurrenceUntil: recurrenceRule && recurrenceUntil ? `${recurrenceUntil}T23:59:59Z` : null,
       reminderMinutes: reminderMinutes ? Number(reminderMinutes) : null,
       participantMemberIds: participants,
     });
@@ -331,6 +343,11 @@ export function FamilyCalendarView({
 
   return (
     <Section>
+      <OfflineCacheBanner
+        isFromCache={isFromCache}
+        isCacheExpired={isCacheExpired}
+        cachedAt={cachedAt}
+      />
       <PageHeader
         title={t("calendar.title")}
         description={`Timezone: ${data.familyTimezone} · Shared events, personal schedules, and recurring plans.`}
@@ -709,7 +726,33 @@ export function FamilyCalendarView({
             onChange={(e) => setLocation(e.target.value)}
           />
 
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13.5px] font-medium text-[var(--text-primary)]">
+              {t("tasks.notesLabel")}
+            </label>
+            <textarea
+              rows={2}
+              placeholder={t("tasks.notesPlaceholder")}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-xl bg-[var(--bg-subtle)] p-3 text-[16px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/15 sm:text-[14px]"
+            />
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
+            <Select
+              label={t("tasks.categoryLabel")}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              options={[
+                { value: "family", label: t("calendar.vis.family") },
+                { value: "school", label: t("tasks.cat.school") },
+                { value: "medical", label: t("tasks.cat.health") },
+                { value: "errands", label: t("tasks.cat.errands") },
+                { value: "chores", label: t("tasks.cat.chores") },
+                { value: "other", label: t("tasks.cat.other") },
+              ]}
+            />
             <Select
               label={t("calendar.visibilityLabel")}
               value={visibility}
@@ -758,6 +801,14 @@ export function FamilyCalendarView({
                 { value: "yearly", label: t("calendar.repeat.yearly") },
               ]}
             />
+            {recurrenceRule && (
+              <Input
+                label={t("calendar.dateLabel")}
+                type="date"
+                value={recurrenceUntil}
+                onChange={(e) => setRecurrenceUntil(e.target.value)}
+              />
+            )}
             <Select
               label={t("calendar.reminderLabel")}
               value={reminderMinutes}

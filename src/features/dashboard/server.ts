@@ -187,6 +187,23 @@ export async function getFamilyDashboardData(
     endOfToday.setHours(23, 59, 59, 999);
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+    // Current calendar month bounds in the family's timezone (YYYY-MM-DD)
+    const monthParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+    }).formatToParts(now);
+    const tzYear = Number(
+      monthParts.find((p) => p.type === "year")?.value ?? now.getUTCFullYear()
+    );
+    const tzMonth = Number(
+      monthParts.find((p) => p.type === "month")?.value ?? now.getUTCMonth() + 1
+    );
+    const monthStart = `${String(tzYear).padStart(4, "0")}-${String(tzMonth).padStart(2, "0")}-01`;
+    const nextMonthYear = tzMonth === 12 ? tzYear + 1 : tzYear;
+    const nextMonthNum = tzMonth === 12 ? 1 : tzMonth + 1;
+    const nextMonthStart = `${String(nextMonthYear).padStart(4, "0")}-${String(nextMonthNum).padStart(2, "0")}-01`;
+
     const canViewFinance =
       permissions.includes("finance.accounts.manage") ||
       permissions.includes("finance.transactions.manage");
@@ -200,6 +217,7 @@ export async function getFamilyDashboardData(
       { data: shoppingData },
       financeAccountsRes,
       financeTxRes,
+      financeMonthExpensesRes,
       activityRes,
     ] = await Promise.all([
       supabase
@@ -243,8 +261,19 @@ export async function getFamilyDashboardData(
             .from("finance_transactions")
             .select("id, merchant, category, kind, amount_cents, occurred_on")
             .eq("family_id", familyId)
+            .eq("is_reversed", false)
             .order("occurred_on", { ascending: false })
             .limit(5)
+        : Promise.resolve({ data: null }),
+      canViewFinance
+        ? supabase
+            .from("finance_transactions")
+            .select("amount_cents")
+            .eq("family_id", familyId)
+            .eq("kind", "expense")
+            .eq("is_reversed", false)
+            .gte("occurred_on", monthStart)
+            .lt("occurred_on", nextMonthStart)
         : Promise.resolve({ data: null }),
       canViewAudit
         ? supabase
@@ -311,9 +340,13 @@ export async function getFamilyDashboardData(
         (sum, a) => sum + Number(a.monthly_budget_cents),
         0
       );
-      const monthlySpentCents = txs
-        .filter((tx) => tx.kind === "expense")
-        .reduce((sum, tx) => sum + Number(tx.amount_cents), 0);
+      const monthlyExpenseRows = (financeMonthExpensesRes.data ?? []) as Array<{
+        amount_cents: number;
+      }>;
+      const monthlySpentCents = monthlyExpenseRows.reduce(
+        (sum, tx) => sum + Number(tx.amount_cents),
+        0
+      );
 
       financeSummary = {
         currencyCode: family?.currency_code ?? accounts[0]?.currency_code ?? "USD",

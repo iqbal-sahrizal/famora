@@ -209,3 +209,182 @@ export async function runDueRecurringSchedulesAction(params: {
     };
   }
 }
+
+async function hasFinanceManagePerm(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  familyId: string
+): Promise<boolean> {
+  const { data } = await supabase.rpc("get_my_family_permissions", {
+    p_family_id: familyId,
+  });
+  return ((data as Array<{ permission_key: string }>) ?? []).some(
+    (p) =>
+      p.permission_key === "finance.accounts.manage" ||
+      p.permission_key === "finance.transactions.manage"
+  );
+}
+
+export async function updateBudgetAction(
+  input: z.infer<typeof createBudgetSchema> & { budgetId: string }
+) {
+  await requireAuthenticatedUser();
+  const parsed = createBudgetSchema
+    .safeParse(input);
+  const idParsed = z.string().uuid().safeParse(input.budgetId);
+  if (!parsed.success || !idParsed.success) {
+    return { ok: false, error: "Invalid budget details." };
+  }
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (!(await hasFinanceManagePerm(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "Missing finance permission." };
+    }
+    const { data: updated, error } = await supabase
+      .from("finance_budgets")
+      .update({
+        name: parsed.data.name,
+        category: parsed.data.category,
+        period_start: parsed.data.periodStart,
+        period_end: parsed.data.periodEnd,
+        limit_numeric: parsed.data.limitNumeric,
+        alert_threshold_pct: parsed.data.alertThresholdPct,
+      })
+      .eq("id", idParsed.data)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!updated) return { ok: false, error: "Budget not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "budgets"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update budget." };
+  }
+}
+
+export async function deleteBudgetAction(params: {
+  familyId: string;
+  budgetId: string;
+}) {
+  await requireAuthenticatedUser();
+  const parsed = z
+    .object({ familyId: z.string().uuid(), budgetId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid budget reference." };
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (!(await hasFinanceManagePerm(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "Missing finance permission." };
+    }
+    const { data: deleted, error } = await supabase
+      .from("finance_budgets")
+      .delete()
+      .eq("id", parsed.data.budgetId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Budget not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "budgets"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete budget." };
+  }
+}
+
+export async function updateBillAction(
+  input: z.infer<typeof createBillSchema> & { billId: string }
+) {
+  await requireAuthenticatedUser();
+  const parsed = createBillSchema.safeParse(input);
+  const idParsed = z.string().uuid().safeParse(input.billId);
+  if (!parsed.success || !idParsed.success) {
+    return { ok: false, error: "Invalid bill details." };
+  }
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (!(await hasFinanceManagePerm(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "Missing finance permission." };
+    }
+    const { data: updated, error } = await supabase
+      .from("household_bills")
+      .update({
+        title: parsed.data.title,
+        payee: parsed.data.payee,
+        category: parsed.data.category,
+        amount_numeric: parsed.data.amountNumeric,
+        due_on: parsed.data.dueOn,
+        recurrence_frequency: parsed.data.recurrenceFrequency,
+      })
+      .eq("id", idParsed.data)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!updated) return { ok: false, error: "Bill not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "budgets"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update bill." };
+  }
+}
+
+export async function deleteBillAction(params: {
+  familyId: string;
+  billId: string;
+}) {
+  await requireAuthenticatedUser();
+  const parsed = z
+    .object({ familyId: z.string().uuid(), billId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid bill reference." };
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (!(await hasFinanceManagePerm(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "Missing finance permission." };
+    }
+    const { data: deleted, error } = await supabase
+      .from("household_bills")
+      .delete()
+      .eq("id", parsed.data.billId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Bill not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "budgets"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete bill." };
+  }
+}
+
+export async function deleteRecurringScheduleAction(params: {
+  familyId: string;
+  scheduleId: string;
+}) {
+  await requireAuthenticatedUser();
+  const parsed = z
+    .object({ familyId: z.string().uuid(), scheduleId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid schedule reference." };
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (!(await hasFinanceManagePerm(supabase, parsed.data.familyId))) {
+      return { ok: false, error: "Missing finance permission." };
+    }
+    const { data: deleted, error } = await supabase
+      .from("finance_recurring_schedules")
+      .delete()
+      .eq("id", parsed.data.scheduleId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Schedule not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "budgets"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete schedule." };
+  }
+}

@@ -118,4 +118,25 @@ test.describe("Phase M3 — Modal, BottomSheet & Form Interaction Regression", (
       await expect(sheet).toBeHidden();
     });
   }
+
+  test("BUG-054: DatePicker inside Dialog navigates months, updates date, and does not close parent Dialog on mobile", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/design-system");
+
+    await page.getByRole("button", { name: "Add Family Event" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+
+    // Open DatePicker inside Dialog
+    const dateButton = dialog.locator("button", { hasText: /\d{4}/ }).first();
+    await dateButton.click();
+
+    await dialog.getByRole("button", { name: /next month|bulan berikutnya/i }).click();
+    await dialog.getByRole("button", { name: "15", exact: true }).click();
+
+    await expect(dialog).toBeVisible();
+    await expect(dateButton).toContainText("15");
+  });
 });

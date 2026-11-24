@@ -228,7 +228,10 @@ export async function retryOutboxDispatchAction(input: {
   const { actor } = await getMemberActor(parsed.data.familyId);
   if (!actor) return { ok: false, error: "Active membership required." };
 
-  const res = await processPushOutboxItem(parsed.data);
+  const res = await processPushOutboxItem({
+    ...parsed.data,
+    expectedRecipientMemberId: actor.id,
+  });
   revalidatePath(routes.familyDomain(parsed.data.familyId, "notifications"));
   return res;
 }

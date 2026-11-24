@@ -6,11 +6,32 @@ const taskUpdates: Array<Record<string, unknown>> = [];
 let mockTaskRows: Array<Record<string, unknown>> = [];
 let mockRoleKey = "owner";
 let mockActorMember: { id: string } | null = { id: "mem-1" };
-let mockSingleTask: { id: string; assigned_member_id: string | null } | null = {
+let mockSingleTask: {
+  id: string;
+  status: string;
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  due_at: string | null;
+  points_value: number;
+  recurrence_rule: string | null;
+  assigned_member_id: string | null;
+} | null = {
   id: "11111111-1111-4111-8111-111111111111",
+  status: "todo",
+  title: "Pay water bill",
+  description: "",
+  category: "bills",
+  priority: "high",
+  due_at: null,
+  points_value: 10,
+  recurrence_rule: null,
   assigned_member_id: "mem-1",
 };
 let mockTaskAssignee: { task_id: string } | null = null;
+let mockMonthlyExpenseRows: Array<{ amount_cents: number }> = [];
+const insertedTaskHistory: Array<Record<string, unknown>> = [];
 
 const mockSupabase = {
   rpc: vi.fn(async () => ({ data: mockPermissions, error: null })),
@@ -22,6 +43,7 @@ const mockSupabase = {
       neq: vi.fn().mockReturnThis(),
       is: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
+      lt: vi.fn().mockReturnThis(),
       lte: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({ data: [] }),
@@ -71,10 +93,21 @@ const mockSupabase = {
         taskUpdates.push(payload);
         return {
           eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ error: null }),
+            eq: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn(async () => ({
+                  data: mockSingleTask ? { id: mockSingleTask.id } : null,
+                  error: null,
+                })),
+              }),
+            }),
           }),
         };
       });
+    }
+
+    if (table === "finance_transactions") {
+      chain.lt = vi.fn(async () => ({ data: mockMonthlyExpenseRows }));
     }
 
     if (table === "task_assignees") {
@@ -82,7 +115,10 @@ const mockSupabase = {
     }
 
     if (table === "task_history") {
-      (chain as Record<string, unknown>).insert = vi.fn().mockResolvedValue({ error: null });
+      (chain as Record<string, unknown>).insert = vi.fn(async (row: Record<string, unknown>) => {
+        insertedTaskHistory.push(row);
+        return { error: null };
+      });
     }
 
     if (table === "finance_accounts") {
@@ -121,7 +157,21 @@ describe("Famora Family Dashboard Personalization & Security", () => {
     vi.clearAllMocks();
     queriedTables.length = 0;
     taskUpdates.length = 0;
+    insertedTaskHistory.length = 0;
     mockTaskRows = [];
+    mockMonthlyExpenseRows = [];
+    mockSingleTask = {
+      id: "11111111-1111-4111-8111-111111111111",
+      status: "todo",
+      title: "Pay water bill",
+      description: "",
+      category: "bills",
+      priority: "high",
+      due_at: null,
+      points_value: 10,
+      recurrence_rule: null,
+      assigned_member_id: "mem-1",
+    };
   });
 
   it("never queries or exposes financial data to child or guest roles", async () => {
@@ -218,6 +268,14 @@ describe("Famora Family Dashboard Personalization & Security", () => {
 
     mockSingleTask = {
       id: "11111111-1111-4111-8111-111111111111",
+      status: "todo",
+      title: "Pay water bill",
+      description: "",
+      category: "bills",
+      priority: "high",
+      due_at: null,
+      points_value: 10,
+      recurrence_rule: null,
       assigned_member_id: "mem-other",
     };
     mockTaskAssignee = null;
@@ -227,5 +285,47 @@ describe("Famora Family Dashboard Personalization & Security", () => {
     });
     expect(unauthorizedRes.ok).toBe(false);
     expect(taskUpdates).toHaveLength(0);
+  });
+
+  it("BUG-005 & BUG-006: sums monthlySpentCents across >5 transactions without truncation and logs event_type idempotently", async () => {
+    mockRoleKey = "owner";
+    mockPermissions = [{ permission_key: "finance.transactions.manage" }];
+    // 7 expenses in current month (> limit(5) of recentTransactions)
+    mockMonthlyExpenseRows = [
+      { amount_cents: 1000 },
+      { amount_cents: 2000 },
+      { amount_cents: 3000 },
+      { amount_cents: 4000 },
+      { amount_cents: 5000 },
+      { amount_cents: 6000 },
+      { amount_cents: 7000 },
+    ];
+
+    const payload = await getFamilyDashboardData("fam-1", "user-1");
+    expect(payload.financeSummary?.monthlySpentCents).toBe(28000);
+
+    // Empty month returns 0
+    mockMonthlyExpenseRows = [];
+    const emptyPayload = await getFamilyDashboardData("fam-1", "user-1");
+    expect(emptyPayload.financeSummary?.monthlySpentCents).toBe(0);
+
+    // quickCompleteTaskAction records event_type: "status.done" (not "action") and is idempotent
+    mockPermissions = [{ permission_key: "tasks.manage_all" }];
+    const first = await quickCompleteTaskAction({
+      familyId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      taskId: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(first.ok).toBe(true);
+    expect(insertedTaskHistory[0]?.event_type).toBe("status.done");
+
+    // Repeated call when already done is idempotent
+    mockSingleTask = { ...mockSingleTask!, status: "done" };
+    const second = await quickCompleteTaskAction({
+      familyId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      taskId: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(second.ok).toBe(true);
+    expect(taskUpdates).toHaveLength(1);
+    expect(insertedTaskHistory).toHaveLength(1);
   });
 });

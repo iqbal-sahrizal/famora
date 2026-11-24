@@ -10,6 +10,7 @@ import {
   HeartPulse,
   Lock,
   Paperclip,
+  Pencil,
   Plus,
   Ruler,
   ShieldCheck,
@@ -37,7 +38,17 @@ import {
   addMilestoneAction,
   createChildProfileAction,
   deleteChildAttachmentAction,
+  deleteChildProfileAction,
+  deleteEducationRecordAction,
+  deleteGrowthRecordAction,
+  deleteHealthRecordAction,
+  deleteMilestoneAction,
   getChildAttachmentSignedUrlAction,
+  updateChildProfileAction,
+  updateEducationRecordAction,
+  updateGrowthRecordAction,
+  updateHealthRecordAction,
+  updateMilestoneAction,
   uploadChildAttachmentAction,
 } from "../actions";
 import type { ChildDevPageData } from "../server";
@@ -60,10 +71,15 @@ export function ChildDevelopmentView({
   const [busy, setBusy] = React.useState(false);
 
   const [profileOpen, setProfileOpen] = React.useState(false);
+  const [editingProfileId, setEditingProfileId] = React.useState<string | null>(null);
   const [milestoneOpen, setMilestoneOpen] = React.useState(false);
+  const [editingMilestoneId, setEditingMilestoneId] = React.useState<string | null>(null);
   const [growthOpen, setGrowthOpen] = React.useState(false);
+  const [editingGrowthId, setEditingGrowthId] = React.useState<string | null>(null);
   const [eduOpen, setEduOpen] = React.useState(false);
+  const [editingEduId, setEditingEduId] = React.useState<string | null>(null);
   const [healthOpen, setHealthOpen] = React.useState(false);
+  const [editingHealthId, setEditingHealthId] = React.useState<string | null>(null);
   const [attOpen, setAttOpen] = React.useState(false);
   const [attRecordType, setAttRecordType] = React.useState<"health" | "education" | "milestone">("education");
   const [attNotes, setAttNotes] = React.useState("");
@@ -100,6 +116,18 @@ export function ChildDevelopmentView({
   const [hProvider, setHProvider] = React.useState("");
   const [hDate, setHDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [hNotes, setHNotes] = React.useState("");
+
+  React.useEffect(() => {
+    if (!data.profiles.some((p) => p.id === selectedChildId)) {
+      setSelectedChildId(data.profiles[0]?.id ?? "");
+    }
+  }, [data.profiles, selectedChildId]);
+
+  React.useEffect(() => {
+    if (!data.canManageGrowthMilestones && data.canViewHealth && attRecordType !== "health") {
+      setAttRecordType("health");
+    }
+  }, [data.canManageGrowthMilestones, data.canViewHealth, attRecordType]);
 
   if (!data.canViewIdentity) {
     return (
@@ -202,19 +230,33 @@ export function ChildDevelopmentView({
   const handleCreateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const res = await createChildProfileAction({
-      familyId,
-      displayName: pName,
-      birthDate: pBirth,
-      birthPlace: "",
-      schoolName: pSchool,
-      gradeLevel: pGrade,
-      teacherName: "",
-    });
+    const res = editingProfileId
+      ? await updateChildProfileAction({
+          familyId,
+          profileId: editingProfileId,
+          displayName: pName,
+          birthDate: pBirth,
+          birthPlace: "",
+          schoolName: pSchool,
+          gradeLevel: pGrade,
+          teacherName: "",
+        })
+      : await createChildProfileAction({
+          familyId,
+          displayName: pName,
+          birthDate: pBirth,
+          birthPlace: "",
+          schoolName: pSchool,
+          gradeLevel: pGrade,
+          teacherName: "",
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setPName("");
+      setPSchool("");
+      setPGrade("");
+      setEditingProfileId(null);
       setProfileOpen(false);
       toast.success(t("childDev.toast.profileCreated"));
       router.refresh();
@@ -225,21 +267,32 @@ export function ChildDevelopmentView({
     e.preventDefault();
     if (!activeChild) return;
     setBusy(true);
-    const res = await addMilestoneAction({
-      familyId,
-      childProfileId: activeChild.id,
-      category: mCat,
-      title: mTitle,
-      description: mDesc,
-      achievedOn: mDate,
-      photoAttachmentName: mPhoto.trim() || null,
-    });
+    const res = editingMilestoneId
+      ? await updateMilestoneAction({
+          familyId,
+          milestoneId: editingMilestoneId,
+          category: mCat,
+          title: mTitle,
+          description: mDesc,
+          achievedOn: mDate,
+          photoAttachmentName: mPhoto.trim() || null,
+        })
+      : await addMilestoneAction({
+          familyId,
+          childProfileId: activeChild.id,
+          category: mCat,
+          title: mTitle,
+          description: mDesc,
+          achievedOn: mDate,
+          photoAttachmentName: mPhoto.trim() || null,
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setMTitle("");
       setMDesc("");
       setMPhoto("");
+      setEditingMilestoneId(null);
       setMilestoneOpen(false);
       toast.success(t("childDev.toast.milestoneSaved"));
       router.refresh();
@@ -250,17 +303,27 @@ export function ChildDevelopmentView({
     e.preventDefault();
     if (!activeChild) return;
     setBusy(true);
-    const res = await addGrowthRecordAction({
-      familyId,
-      childProfileId: activeChild.id,
-      measuredOn: gDate,
-      heightCm: Number(gHeight),
-      weightKg: Number(gWeight),
-      notes: "",
-    });
+    const res = editingGrowthId
+      ? await updateGrowthRecordAction({
+          familyId,
+          recordId: editingGrowthId,
+          measuredOn: gDate,
+          heightCm: Number(gHeight),
+          weightKg: Number(gWeight),
+          notes: "",
+        })
+      : await addGrowthRecordAction({
+          familyId,
+          childProfileId: activeChild.id,
+          measuredOn: gDate,
+          heightCm: Number(gHeight),
+          weightKg: Number(gWeight),
+          notes: "",
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
+      setEditingGrowthId(null);
       setGrowthOpen(false);
       toast.success(t("childDev.toast.growthSaved"));
       router.refresh();
@@ -271,19 +334,29 @@ export function ChildDevelopmentView({
     e.preventDefault();
     if (!activeChild) return;
     setBusy(true);
-    const res = await addEducationRecordAction({
-      familyId,
-      childProfileId: activeChild.id,
-      recordType: eType,
-      title: eTitle,
-      details: eDetails,
-      eventDate: eDate || null,
-    });
+    const res = editingEduId
+      ? await updateEducationRecordAction({
+          familyId,
+          recordId: editingEduId,
+          recordType: eType,
+          title: eTitle,
+          details: eDetails,
+          eventDate: eDate || null,
+        })
+      : await addEducationRecordAction({
+          familyId,
+          childProfileId: activeChild.id,
+          recordType: eType,
+          title: eTitle,
+          details: eDetails,
+          eventDate: eDate || null,
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setETitle("");
       setEDetails("");
+      setEditingEduId(null);
       setEduOpen(false);
       toast.success(t("childDev.toast.eduSaved"));
       router.refresh();
@@ -294,20 +367,31 @@ export function ChildDevelopmentView({
     e.preventDefault();
     if (!activeChild) return;
     setBusy(true);
-    const res = await addHealthRecordAction({
-      familyId,
-      childProfileId: activeChild.id,
-      recordType: hType,
-      title: hTitle,
-      providerName: hProvider,
-      recordedOn: hDate,
-      notes: hNotes,
-    });
+    const res = editingHealthId
+      ? await updateHealthRecordAction({
+          familyId,
+          recordId: editingHealthId,
+          recordType: hType,
+          title: hTitle,
+          providerName: hProvider,
+          recordedOn: hDate,
+          notes: hNotes,
+        })
+      : await addHealthRecordAction({
+          familyId,
+          childProfileId: activeChild.id,
+          recordType: hType,
+          title: hTitle,
+          providerName: hProvider,
+          recordedOn: hDate,
+          notes: hNotes,
+        });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setHTitle("");
       setHNotes("");
+      setEditingHealthId(null);
       setHealthOpen(false);
       toast.success(t("childDev.toast.healthSaved"));
       router.refresh();
@@ -325,7 +409,7 @@ export function ChildDevelopmentView({
           </Badge>
         }
         actions={
-          data.canManageGrowthMilestones ? (
+          data.canManageProfiles ? (
             <Button size="sm" onClick={() => setProfileOpen(true)}>
               <Plus className="h-4 w-4" />
               {t("childDev.newProfile")}
@@ -339,8 +423,8 @@ export function ChildDevelopmentView({
           icon={<Baby className="h-5 w-5" />}
           title={t("childDev.emptyTitle")}
           description={t("childDev.emptyDesc")}
-          actionLabel={data.canManageGrowthMilestones ? t("childDev.addProfileBtn") : undefined}
-          onAction={data.canManageGrowthMilestones ? () => setProfileOpen(true) : undefined}
+          actionLabel={data.canManageProfiles ? t("childDev.addProfileBtn") : undefined}
+          onAction={data.canManageProfiles ? () => setProfileOpen(true) : undefined}
         />
       ) : (
         <>
@@ -374,18 +458,54 @@ export function ChildDevelopmentView({
                   {activeChild.gradeLevel ? ` (${activeChild.gradeLevel})` : ""}
                 </CardDescription>
               </div>
-              {data.canManageGrowthMilestones && (
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => setGrowthOpen(true)}>
-                    <Ruler className="h-3.5 w-3.5" />
-                    {t("childDev.logGrowthBtn")}
-                  </Button>
-                  <Button size="sm" onClick={() => setMilestoneOpen(true)}>
-                    <Sparkles className="h-3.5 w-3.5" />
-                    {t("childDev.addMilestoneBtn")}
-                  </Button>
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {data.canManageProfiles && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`${t("common.edit")} ${activeChild.displayName}`}
+                      onClick={() => {
+                        setEditingProfileId(activeChild.id);
+                        setPName(activeChild.displayName);
+                        setPBirth(activeChild.birthDate);
+                        setPSchool(activeChild.schoolName ?? "");
+                        setPGrade(activeChild.gradeLevel ?? "");
+                        setProfileOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      aria-label={`${t("common.delete")} ${activeChild.displayName}`}
+                      onClick={async () => {
+                        setBusy(true);
+                        const r = await deleteChildProfileAction({ familyId, id: activeChild.id });
+                        setBusy(false);
+                        if (!r.ok) toast.error(te(r.error));
+                        else router.refresh();
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                    </Button>
+                  </>
+                )}
+                {data.canManageGrowthMilestones && (
+                  <>
+                    <Button size="sm" variant="secondary" onClick={() => setGrowthOpen(true)}>
+                      <Ruler className="h-3.5 w-3.5" />
+                      {t("childDev.logGrowthBtn")}
+                    </Button>
+                    <Button size="sm" onClick={() => setMilestoneOpen(true)}>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {t("childDev.addMilestoneBtn")}
+                    </Button>
+                  </>
+                )}
+              </div>
             </Card>
           )}
 
@@ -417,9 +537,47 @@ export function ChildDevelopmentView({
                       <span className="absolute -left-6 top-6 h-3 w-3 rounded-full bg-[#E9B98B] ring-4 ring-[var(--bg-canvas)]" />
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <Badge variant="peach">{m.category}</Badge>
-                        <span className="text-[12px] text-[var(--text-muted)] tabular-nums">
-                          {m.achievedOn}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[12px] text-[var(--text-muted)] tabular-nums">
+                            {m.achievedOn}
+                          </span>
+                          {data.canManageGrowthMilestones && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                aria-label={`${t("common.edit")} ${m.title}`}
+                                onClick={() => {
+                                  setEditingMilestoneId(m.id);
+                                  setMCat(m.category as typeof mCat);
+                                  setMTitle(m.title);
+                                  setMDesc(m.description ?? "");
+                                  setMDate(m.achievedOn);
+                                  setMPhoto(m.photoAttachmentName ?? "");
+                                  setMilestoneOpen(true);
+                                }}
+                                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                aria-label={`${t("common.delete")} ${m.title}`}
+                                onClick={async () => {
+                                  setBusy(true);
+                                  const r = await deleteMilestoneAction({ familyId, id: m.id });
+                                  setBusy(false);
+                                  if (!r.ok) toast.error(te(r.error));
+                                  else router.refresh();
+                                }}
+                                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <h3 className="mt-2 font-heading text-[17px] font-semibold">
                         {m.title}
@@ -471,6 +629,40 @@ export function ChildDevelopmentView({
                         <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
                           {g.measuredOn}
                         </span>
+                        {data.canManageGrowthMilestones && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              aria-label={`${t("common.edit")} growth ${g.measuredOn}`}
+                              onClick={() => {
+                                setEditingGrowthId(g.id);
+                                setGDate(g.measuredOn);
+                                setGHeight(String(g.heightCm));
+                                setGWeight(String(g.weightKg));
+                                setGrowthOpen(true);
+                              }}
+                              className="rounded p-0.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              aria-label={`${t("common.delete")} growth ${g.measuredOn}`}
+                              onClick={async () => {
+                                setBusy(true);
+                                const r = await deleteGrowthRecordAction({ familyId, id: g.id });
+                                setBusy(false);
+                                if (!r.ok) toast.error(te(r.error));
+                                else router.refresh();
+                              }}
+                              className="rounded p-0.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                            >
+                              <Trash2 className="h-3 w-3 text-[var(--accent-danger)]" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -497,13 +689,50 @@ export function ChildDevelopmentView({
                 <div className="grid gap-4 md:grid-cols-2">
                   {childEdu.map((ed) => (
                     <Card key={ed.id} className="space-y-2 p-5">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <Badge variant="sage">{ed.recordType.replace("_", " ")}</Badge>
-                        {ed.eventDate && (
-                          <span className="text-[12px] text-[var(--text-muted)] tabular-nums">
-                            {ed.eventDate}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {ed.eventDate && (
+                            <span className="text-[12px] text-[var(--text-muted)] tabular-nums">
+                              {ed.eventDate}
+                            </span>
+                          )}
+                          {data.canManageGrowthMilestones && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                aria-label={`${t("common.edit")} ${ed.title}`}
+                                onClick={() => {
+                                  setEditingEduId(ed.id);
+                                  setEType(ed.recordType as typeof eType);
+                                  setETitle(ed.title);
+                                  setEDetails(ed.details ?? "");
+                                  setEDate(ed.eventDate ?? "");
+                                  setEduOpen(true);
+                                }}
+                                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                aria-label={`${t("common.delete")} ${ed.title}`}
+                                onClick={async () => {
+                                  setBusy(true);
+                                  const r = await deleteEducationRecordAction({ familyId, id: ed.id });
+                                  setBusy(false);
+                                  if (!r.ok) toast.error(te(r.error));
+                                  else router.refresh();
+                                }}
+                                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <CardTitle>{ed.title}</CardTitle>
                       {ed.details && <CardDescription>{ed.details}</CardDescription>}
@@ -535,11 +764,45 @@ export function ChildDevelopmentView({
                 <div className="space-y-3">
                   {childHealth.map((h) => (
                     <Card key={h.id} className="space-y-1.5 p-5">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <Badge variant="blush">{h.recordType.replace("_", " ")}</Badge>
-                        <span className="text-[12px] text-[var(--text-muted)] tabular-nums">
-                          {h.recordedOn}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[12px] text-[var(--text-muted)] tabular-nums">
+                            {h.recordedOn}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            aria-label={`${t("common.edit")} ${h.title}`}
+                            onClick={() => {
+                              setEditingHealthId(h.id);
+                              setHType(h.recordType as typeof hType);
+                              setHTitle(h.title);
+                              setHProvider(h.providerName ?? "");
+                              setHDate(h.recordedOn);
+                              setHNotes(h.notes ?? "");
+                              setHealthOpen(true);
+                            }}
+                            className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            aria-label={`${t("common.delete")} ${h.title}`}
+                            onClick={async () => {
+                              setBusy(true);
+                              const r = await deleteHealthRecordAction({ familyId, id: h.id });
+                              setBusy(false);
+                              if (!r.ok) toast.error(te(r.error));
+                              else router.refresh();
+                            }}
+                            className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                          </button>
+                        </div>
                       </div>
                       <CardTitle>{h.title}</CardTitle>
                       <CardDescription>
@@ -645,7 +908,7 @@ export function ChildDevelopmentView({
       )}
 
       {/* Sheets */}
-      <BottomSheet open={profileOpen} onClose={() => setProfileOpen(false)} title={t("childDev.sheet.profileTitle")}>
+      <BottomSheet open={profileOpen} onClose={() => { setProfileOpen(false); setEditingProfileId(null); }} title={t("childDev.sheet.profileTitle")}>
         <form onSubmit={handleCreateProfile} className="space-y-4">
           <Input label={t("childDev.sheet.childName")} required value={pName} onChange={(e) => setPName(e.target.value)} />
           <Input label={t("childDev.sheet.birthDate")} type="date" required value={pBirth} onChange={(e) => setPBirth(e.target.value)} />
@@ -657,7 +920,7 @@ export function ChildDevelopmentView({
         </form>
       </BottomSheet>
 
-      <BottomSheet open={milestoneOpen} onClose={() => setMilestoneOpen(false)} title={t("childDev.sheet.milestoneTitle")}>
+      <BottomSheet open={milestoneOpen} onClose={() => { setMilestoneOpen(false); setEditingMilestoneId(null); }} title={t("childDev.sheet.milestoneTitle")}>
         <form onSubmit={handleAddMilestone} className="space-y-4">
           <Input label={t("childDev.milestoneTitleLabel")} required placeholder={t("childDev.milestoneTitlePlaceholder")} value={mTitle} onChange={(e) => setMTitle(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">
@@ -670,7 +933,7 @@ export function ChildDevelopmentView({
         </form>
       </BottomSheet>
 
-      <BottomSheet open={growthOpen} onClose={() => setGrowthOpen(false)} title={t("childDev.sheet.growthTitle")}>
+      <BottomSheet open={growthOpen} onClose={() => { setGrowthOpen(false); setEditingGrowthId(null); }} title={t("childDev.sheet.growthTitle")}>
         <form onSubmit={handleAddGrowth} className="space-y-4">
           <Input label={t("childDev.sheet.measuredOn")} type="date" required value={gDate} onChange={(e) => setGDate(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">
@@ -681,7 +944,7 @@ export function ChildDevelopmentView({
         </form>
       </BottomSheet>
 
-      <BottomSheet open={eduOpen} onClose={() => setEduOpen(false)} title={t("childDev.sheet.eduTitle")}>
+      <BottomSheet open={eduOpen} onClose={() => { setEduOpen(false); setEditingEduId(null); }} title={t("childDev.sheet.eduTitle")}>
         <form onSubmit={handleAddEdu} className="space-y-4">
           <Select label={t("childDev.sheet.typeLabel")} value={eType} onChange={(e) => setEType(e.target.value as typeof eType)} options={[{ value: "academic_activity", label: t("childDev.eduType.academic_activity") }, { value: "important_date", label: t("childDev.eduType.important_date") }, { value: "school_info", label: t("childDev.eduType.school_info") }]} />
           <Input label={t("childDev.sheet.titleLabel")} required value={eTitle} onChange={(e) => setETitle(e.target.value)} />
@@ -691,7 +954,7 @@ export function ChildDevelopmentView({
         </form>
       </BottomSheet>
 
-      <BottomSheet open={healthOpen} onClose={() => setHealthOpen(false)} title={t("childDev.sheet.healthTitle")}>
+      <BottomSheet open={healthOpen} onClose={() => { setHealthOpen(false); setEditingHealthId(null); }} title={t("childDev.sheet.healthTitle")}>
         <form onSubmit={handleAddHealth} className="space-y-4">
           <Select label={t("childDev.sheet.recordTypeLabel")} value={hType} onChange={(e) => setHType(e.target.value as typeof hType)} options={[{ value: "immunization", label: t("childDev.healthType.immunization") }, { value: "appointment", label: t("childDev.healthType.appointment") }, { value: "checkup", label: t("childDev.healthType.checkup") }, { value: "allergy_note", label: t("childDev.healthType.allergy_note") }]} />
           <Input label={t("childDev.sheet.titleLabel")} required value={hTitle} onChange={(e) => setHTitle(e.target.value)} />

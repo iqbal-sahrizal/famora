@@ -6,9 +6,11 @@ import {
   BarChart3,
   Download,
   Lock,
+  Pencil,
   PiggyBank,
   Plus,
   Scale,
+  Trash2,
   TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -35,7 +37,10 @@ import {
   contributeToGoalAction,
   createDebtReceivableAction,
   createFinanceGoalAction,
+  deleteDebtReceivableAction,
+  deleteFinanceGoalAction,
   recordDebtPaymentAction,
+  updateFinanceGoalAction,
 } from "../analytics-actions";
 import type { AnalyticsPageData } from "../analytics-server";
 import { formatNumericCurrency, parseDecimalToMinorUnits } from "../money";
@@ -465,15 +470,59 @@ export function FamilyAnalyticsView({
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    {g.status === "active" && data.canManageTransactions && (
-                      <Button
-                        variant="tonal"
-                        size="sm"
-                        onClick={() => setContribGoalId(g.id)}
-                      >
-                        {t("analytics.addContributionBtn")}
-                      </Button>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {g.status === "active" && data.canManageTransactions && (
+                        <Button
+                          variant="tonal"
+                          size="sm"
+                          onClick={() => setContribGoalId(g.id)}
+                        >
+                          {t("analytics.addContributionBtn")}
+                        </Button>
+                      )}
+                      {data.canManageTransactions && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            aria-label={`${t("common.edit")} ${g.title}`}
+                            onClick={async () => {
+                              const nextTitle = window.prompt(t("analytics.modal.goalName"), g.title);
+                              if (!nextTitle?.trim()) return;
+                              setBusy(true);
+                              const r = await updateFinanceGoalAction({
+                                familyId,
+                                goalId: g.id,
+                                title: nextTitle.trim(),
+                                targetNumeric: g.targetNumeric,
+                                targetDate: g.targetDate,
+                              });
+                              setBusy(false);
+                              if (!r.ok) toast.error(te(r.error));
+                              else router.refresh();
+                            }}
+                            className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            aria-label={`${t("common.delete")} ${g.title}`}
+                            onClick={async () => {
+                              setBusy(true);
+                              const r = await deleteFinanceGoalAction({ familyId, goalId: g.id });
+                              setBusy(false);
+                              if (!r.ok) toast.error(te(r.error));
+                              else router.refresh();
+                            }}
+                            className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </Card>
                 );
               })}
@@ -518,11 +567,30 @@ export function FamilyAnalyticsView({
                       })}
                     </p>
                   </div>
-                  {d.status === "open" && data.canManageTransactions && (
-                    <Button size="sm" variant="secondary" onClick={() => setPayDebtId(d.id)}>
-                      {t("analytics.recordPaymentBtn")}
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {d.status === "open" && data.canManageTransactions && (
+                      <Button size="sm" variant="secondary" onClick={() => setPayDebtId(d.id)}>
+                        {t("analytics.recordPaymentBtn")}
+                      </Button>
+                    )}
+                    {data.canManageTransactions && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`${t("common.delete")} ${d.title}`}
+                        onClick={async () => {
+                          setBusy(true);
+                          const r = await deleteDebtReceivableAction({ familyId, debtId: d.id });
+                          setBusy(false);
+                          if (!r.ok) toast.error(te(r.error));
+                          else router.refresh();
+                        }}
+                        className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                      </button>
+                    )}
+                  </div>
                 </Card>
               ))}
             </div>

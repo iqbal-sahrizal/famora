@@ -25,6 +25,8 @@ export function usePwaSync(familyId?: string) {
     failedCount: 0,
     conflictCount: 0,
   });
+  const summaryRef = React.useRef(summary);
+  summaryRef.current = summary;
   const [isSyncing, setIsSyncing] = React.useState(false);
   const [authExpired, setAuthExpired] = React.useState(false);
   const [updateAvailable, setUpdateAvailable] = React.useState(false);
@@ -51,7 +53,12 @@ export function usePwaSync(familyId?: string) {
   const runFlush = React.useCallback(
     async (forceRetryFailed: boolean): Promise<FlushOutboxResult> => {
       if (!isOnline) {
-        return { synced: 0, failed: summary.failedCount, conflicts: summary.conflictCount, authExpired: false };
+        return {
+          synced: 0,
+          failed: summaryRef.current.failedCount,
+          conflicts: summaryRef.current.conflictCount,
+          authExpired: false,
+        };
       }
       setIsSyncing(true);
       try {
@@ -73,7 +80,7 @@ export function usePwaSync(familyId?: string) {
         setIsSyncing(false);
       }
     },
-    [familyId, isOnline, refreshSummary, router, summary.conflictCount, summary.failedCount]
+    [familyId, isOnline, refreshSummary, router]
   );
 
   const retrySync = React.useCallback(

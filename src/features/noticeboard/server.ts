@@ -11,6 +11,7 @@ export interface NoticeboardAnnouncement {
   authorName: string;
   canEditOrDelete: boolean;
   attachments: Array<{ name: string }>;
+  attachmentStoragePath: string | null;
   readCount: number;
   hasRead: boolean;
   createdAt: string;
@@ -26,6 +27,7 @@ export interface NoticeboardPoll {
   visibility: "family" | "adults_only";
   expiresAt: string | null;
   isClosed: boolean;
+  canEditOrDelete: boolean;
   totalVotes: number;
   mySelectedOptionIds: string[];
   options: Array<{
@@ -71,7 +73,7 @@ export async function getNoticeboardData(
         .eq("status", "active"),
       supabase
         .from("family_announcements")
-        .select("id, title, body, audience, pinned, is_archived, author_member_id, attachments_jsonb, created_at")
+        .select("id, title, body, audience, pinned, is_archived, author_member_id, attachments_jsonb, attachment_storage_path, created_at")
         .eq("family_id", familyId)
         .order("pinned", { ascending: false })
         .order("created_at", { ascending: false }),
@@ -84,7 +86,7 @@ export async function getNoticeboardData(
         .select(
           `
           id, question, description, allow_multiple, is_anonymous, allow_vote_edit,
-          visibility, expires_at, is_closed,
+          visibility, expires_at, is_closed, created_by_member_id,
           family_poll_options(id, label, sort_order)
         `
         )
@@ -136,6 +138,9 @@ export async function getNoticeboardData(
         attachments: Array.isArray(a.attachments_jsonb)
           ? (a.attachments_jsonb as Array<{ name: string }>)
           : [],
+        attachmentStoragePath:
+          (a as { attachment_storage_path?: string | null }).attachment_storage_path ??
+          null,
         readCount: annReads.length,
         hasRead: currentMember
           ? annReads.some((r) => r.member_id === currentMember.id)
@@ -166,6 +171,7 @@ export async function getNoticeboardData(
         visibility: "family" | "adults_only";
         expires_at: string | null;
         is_closed: boolean;
+        created_by_member_id: string | null;
         family_poll_options: Array<{ id: string; label: string; sort_order: number }>;
       }>) ?? []
     ).map((p) => {
@@ -200,6 +206,11 @@ export async function getNoticeboardData(
         visibility: p.visibility,
         expiresAt: p.expires_at,
         isClosed: p.is_closed,
+        canEditOrDelete: Boolean(
+          currentMember &&
+            canPublish &&
+            (isAdminOrOwner || p.created_by_member_id === currentMember.id)
+        ),
         totalVotes,
         mySelectedOptionIds,
         options,

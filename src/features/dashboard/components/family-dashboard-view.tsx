@@ -34,10 +34,11 @@ import { BudgetRing } from "@/components/ui/charts";
 import { BottomSheet } from "@/components/ui/dialog";
 import { EmptyState, ErrorState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
-import { useOnlineStatus } from "@/hooks/use-online-status";
+import { OfflineCacheBanner } from "@/components/pwa/offline-cache-banner";
+import { useOfflineCachedData } from "@/hooks/use-offline-cached-data";
 import { formatLocalizedDate, toIntlLocale, type Locale } from "@/lib/i18n";
+import { enqueueOfflineMutation } from "@/lib/pwa/sync-engine";
 import { useLocale } from "@/providers/locale-provider";
-import { readOfflineCache, writeOfflineCache } from "@/lib/pwa/indexeddb";
 import { routes } from "@/lib/routes";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
@@ -75,23 +76,22 @@ export function FamilyDashboardView({
 }) {
   const router = useRouter();
   const { locale, t, te } = useLocale();
-  const isOnline = useOnlineStatus();
-  const [cachedData, setCachedData] =
-    React.useState<FamilyDashboardPayload | null>(null);
-  const effectiveData =
-    !isOnline && !data.family && cachedData ? cachedData : data;
-
-  React.useEffect(() => {
-    if (isOnline && data.family) {
-      void writeOfflineCache(familyId, "dashboard", data);
-    } else if (!isOnline) {
-      void readOfflineCache<FamilyDashboardPayload>(familyId, "dashboard").then(
-        (entry) => {
-          if (entry?.data) setCachedData(entry.data);
-        }
-      );
-    }
-  }, [familyId, isOnline, data]);
+  const isDashboardEmpty = React.useCallback(
+    (d: FamilyDashboardPayload) => !d.family,
+    []
+  );
+  const {
+    effectiveData,
+    isFromCache,
+    isCacheExpired,
+    cachedAt,
+    isOnline,
+  } = useOfflineCachedData({
+    familyId,
+    domain: "dashboard",
+    serverData: data,
+    isEmptyData: isDashboardEmpty,
+  });
 
   const [quickTaskOpen, setQuickTaskOpen] = React.useState(false);
   const [quickShopOpen, setQuickShopOpen] = React.useState(false);
@@ -111,6 +111,18 @@ export function FamilyDashboardView({
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isOnline) {
+      await enqueueOfflineMutation({
+        familyId,
+        domain: "tasks",
+        actionType: "save_task",
+        payload: { title: taskTitle.trim(), category: "household", priority: "normal" },
+      });
+      setTaskTitle("");
+      setQuickTaskOpen(false);
+      toast.info(t("calendar.toast.offline"));
+      return;
+    }
     setBusy(true);
     const res = await quickAddTaskAction({ familyId, title: taskTitle });
     setBusy(false);
@@ -126,6 +138,18 @@ export function FamilyDashboardView({
 
   const handleAddShopping = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isOnline) {
+      await enqueueOfflineMutation({
+        familyId,
+        domain: "shopping",
+        actionType: "add_item",
+        payload: { listId: null, name: shopName.trim(), category: "Groceries", quantity: "1" },
+      });
+      setShopName("");
+      setQuickShopOpen(false);
+      toast.info(t("shopping.toast.offlineAdd"));
+      return;
+    }
     setBusy(true);
     const res = await quickAddShoppingItemAction({ familyId, name: shopName });
     setBusy(false);
@@ -140,6 +164,16 @@ export function FamilyDashboardView({
   };
 
   const handleToggleShopping = async (itemId: string, current: boolean) => {
+    if (!isOnline) {
+      await enqueueOfflineMutation({
+        familyId,
+        domain: "shopping",
+        actionType: "toggle_check",
+        payload: { itemId, isChecked: !current },
+      });
+      toast.info(t("shopping.toast.offlineToggle"));
+      return;
+    }
     const res = await toggleShoppingItemAction({
       familyId,
       itemId,
@@ -153,6 +187,16 @@ export function FamilyDashboardView({
   };
 
   const handleCompleteTask = async (taskId: string) => {
+    if (!isOnline) {
+      await enqueueOfflineMutation({
+        familyId,
+        domain: "tasks",
+        actionType: "toggle_status",
+        payload: { taskId, nextStatus: "done" },
+      });
+      toast.info(t("calendar.toast.offline"));
+      return;
+    }
     setCompletingTaskId(taskId);
     const res = await quickCompleteTaskAction({ familyId, taskId });
     setCompletingTaskId(null);
@@ -631,6 +675,11 @@ export function FamilyDashboardView({
 
   return (
     <div className="space-y-5 sm:space-y-7">
+      <OfflineCacheBanner
+        isFromCache={isFromCache}
+        isCacheExpired={isCacheExpired}
+        cachedAt={cachedAt}
+      />
       {/* A. Welcome Header */}
       <section className="flex flex-col justify-between gap-5 rounded-[24px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-soft)] sm:rounded-[28px] sm:p-6 lg:flex-row lg:items-center lg:p-8">
         <div className="space-y-2">

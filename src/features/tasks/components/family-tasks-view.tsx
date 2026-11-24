@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { OfflineCacheBanner } from "@/components/pwa/offline-cache-banner";
 import { PageHeader, Section } from "@/components/layout/primitives";
 import { AvatarStack } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -27,19 +28,20 @@ import { EmptyState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
-import { useOnlineStatus } from "@/hooks/use-online-status";
-import { writeOfflineCache } from "@/lib/pwa/indexeddb";
+import { useOfflineCachedData } from "@/hooks/use-offline-cached-data";
 import { enqueueOfflineMutation } from "@/lib/pwa/sync-engine";
 import { cn } from "@/lib/utils";
 import { formatLocalizedDate } from "@/lib/i18n";
 import { useLocale } from "@/providers/locale-provider";
 import {
-  addTaskAttachmentAction,
   addTaskCommentAction,
   deleteTaskAction,
+  deleteTaskAttachmentAction,
+  getTaskAttachmentSignedUrlAction,
   saveTaskAction,
   toggleSubtaskAction,
   toggleTaskStatusAction,
+  uploadTaskAttachmentAction,
 } from "../actions";
 import type { TaskItemView, TasksPageData } from "../server";
 
@@ -58,14 +60,23 @@ export function FamilyTasksView({
 }) {
   const router = useRouter();
   const { locale, t, te } = useLocale();
-  const isOnline = useOnlineStatus();
+  const isTasksEmpty = React.useCallback(
+    (d: TasksPageData) => d.tasks.length === 0 && d.members.length === 0,
+    []
+  );
+  const {
+    effectiveData,
+    isFromCache,
+    isCacheExpired,
+    cachedAt,
+    isOnline,
+  } = useOfflineCachedData({
+    familyId,
+    domain: "tasks",
+    serverData: data,
+    isEmptyData: isTasksEmpty,
+  });
   const [statusFilter, setStatusFilter] = React.useState<"active" | "done" | "all">("active");
-
-  React.useEffect(() => {
-    if (isOnline && data.tasks) {
-      void writeOfflineCache(familyId, "tasks", data);
-    }
-  }, [familyId, isOnline, data]);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [categoryFilter, setCategoryFilter] = React.useState("all");
   const [priorityFilter, setPriorityFilter] = React.useState("all");
@@ -73,8 +84,8 @@ export function FamilyTasksView({
 
   const [selectedTaskId, setSelectedTaskId] = React.useState<string | null>(null);
   const selectedTask = React.useMemo(
-    () => (selectedTaskId ? data.tasks.find((t) => t.id === selectedTaskId) ?? null : null),
-    [data.tasks, selectedTaskId]
+    () => (selectedTaskId ? effectiveData.tasks.find((t) => t.id === selectedTaskId) ?? null : null),
+    [effectiveData.tasks, selectedTaskId]
   );
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -92,13 +103,13 @@ export function FamilyTasksView({
   const [subtaskDraft, setSubtaskDraft] = React.useState("");
   const [syncToCalendar, setSyncToCalendar] = React.useState(false);
 
-  const completedCount = data.tasks.filter((t) => t.status === "done").length;
-  const totalCount = data.tasks.length;
+  const completedCount = effectiveData.tasks.filter((t) => t.status === "done").length;
+  const totalCount = effectiveData.tasks.length;
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const filteredTasks = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return data.tasks.filter((t) => {
+    return effectiveData.tasks.filter((t) => {
       if (statusFilter === "active" && t.status === "done") return false;
       if (statusFilter === "done" && t.status !== "done") return false;
       if (categoryFilter !== "all" && t.category !== categoryFilter) return false;
@@ -118,7 +129,7 @@ export function FamilyTasksView({
       }
       return true;
     });
-  }, [data.tasks, statusFilter, categoryFilter, priorityFilter, assigneeFilter, searchQuery]);
+  }, [effectiveData.tasks, statusFilter, categoryFilter, priorityFilter, assigneeFilter, searchQuery]);
 
   const openNewTask = () => {
     setEditingId(undefined);
@@ -270,21 +281,37 @@ export function FamilyTasksView({
 
   const handleAttachFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file || !selectedTask) return;
     setBusy(true);
-    const res = await addTaskAttachmentAction({
-      familyId,
-      taskId: selectedTask.id,
-      fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
-      sizeBytes: file.size,
-    });
+    const formData = new FormData();
+    formData.set("familyId", familyId);
+    formData.set("taskId", selectedTask.id);
+    formData.set("file", file);
+    const res = await uploadTaskAttachmentAction(formData);
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       toast.success(t("tasks.attachedToast", { name: file.name }));
       router.refresh();
     }
+  };
+
+  const handleOpenAttachment = async (attachmentId: string) => {
+    const res = await getTaskAttachmentSignedUrlAction({ familyId, attachmentId });
+    if (!res.ok || !res.url) {
+      toast.error(te(res.error));
+      return;
+    }
+    window.open(res.url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    setBusy(true);
+    const res = await deleteTaskAttachmentAction({ familyId, attachmentId });
+    setBusy(false);
+    if (!res.ok) toast.error(te(res.error));
+    else router.refresh();
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -301,6 +328,11 @@ export function FamilyTasksView({
 
   return (
     <Section>
+      <OfflineCacheBanner
+        isFromCache={isFromCache}
+        isCacheExpired={isCacheExpired}
+        cachedAt={cachedAt}
+      />
       <PageHeader
         title={t("tasks.title")}
         description={t("tasks.desc")}
@@ -571,12 +603,27 @@ export function FamilyTasksView({
               {selectedTask.attachments.map((att) => (
                 <div
                   key={att.id}
-                  className="flex items-center justify-between rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-[12.5px]"
+                  className="flex items-center justify-between gap-2 rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-[12.5px]"
                 >
-                  <span className="truncate font-medium">{att.fileName}</span>
-                  <span className="text-[var(--text-muted)] tabular-nums">
+                  <button
+                    type="button"
+                    onClick={() => void handleOpenAttachment(att.id)}
+                    className="min-w-0 flex-1 truncate text-left font-medium text-[var(--accent-primary)] hover:underline cursor-pointer"
+                  >
+                    {att.fileName}
+                  </button>
+                  <span className="shrink-0 text-[var(--text-muted)] tabular-nums">
                     {Math.max(1, Math.round(att.sizeBytes / 1024))} KB
                   </span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={`${t("common.delete")} ${att.fileName}`}
+                    onClick={() => void handleDeleteAttachment(att.id)}
+                    className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               ))}
             </div>

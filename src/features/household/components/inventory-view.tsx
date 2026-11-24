@@ -7,8 +7,10 @@ import {
   History,
   Minus,
   Package,
+  Pencil,
   Plus,
   ShoppingCart,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, Section } from "@/components/layout/primitives";
@@ -25,7 +27,9 @@ import { useLocale } from "@/providers/locale-provider";
 import {
   adjustInventoryAction,
   createInventoryItemAction,
+  deleteInventoryItemAction,
   restockToShoppingAction,
+  updateInventoryItemAction,
 } from "../actions";
 import type { getInventoryPageData } from "../server";
 
@@ -41,6 +45,7 @@ export function InventoryView({
   const [tab, setTab] = React.useState<"stock" | "movements">("stock");
   const [category, setCategory] = React.useState("all");
   const [addOpen, setAddOpen] = React.useState(false);
+  const [editingItemId, setEditingItemId] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   const [name, setName] = React.useState("");
@@ -58,19 +63,25 @@ export function InventoryView({
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const res = await createInventoryItemAction({
+    const parsedQty = Number(qty);
+    const parsedMin = Number(minThreshold);
+    const payload = {
       familyId,
       name,
       category: itemCat,
-      quantity: Number(qty) || 1,
+      quantity: Number.isFinite(parsedQty) && parsedQty >= 0 ? parsedQty : 0,
       unit,
-      minThreshold: Number(minThreshold) || 1,
+      minThreshold: Number.isFinite(parsedMin) && parsedMin >= 0 ? parsedMin : 0,
       expiresOn: expiresOn || null,
-    });
+    };
+    const res = editingItemId
+      ? await updateInventoryItemAction({ ...payload, itemId: editingItemId })
+      : await createInventoryItemAction(payload);
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
     else {
       setName("");
+      setEditingItemId(null);
       setAddOpen(false);
       toast.success(t("inv.addedToast"));
       router.refresh();
@@ -221,6 +232,39 @@ export function InventoryView({
                             <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          aria-label={`${t("common.edit")} ${item.name}`}
+                          onClick={() => {
+                            setEditingItemId(item.id);
+                            setName(item.name);
+                            setItemCat(item.category as typeof itemCat);
+                            setQty(String(item.quantity));
+                            setUnit(item.unit);
+                            setMinThreshold(String(item.minThreshold));
+                            setExpiresOn(item.expiresOn ?? "");
+                            setAddOpen(true);
+                          }}
+                          className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          aria-label={`${t("common.delete")} ${item.name}`}
+                          onClick={async () => {
+                            setBusy(true);
+                            const r = await deleteInventoryItemAction({ familyId, id: item.id });
+                            setBusy(false);
+                            if (!r.ok) toast.error(te(r.error));
+                            else router.refresh();
+                          }}
+                          className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                        </button>
                       </>
                     )}
                   </div>
@@ -254,7 +298,7 @@ export function InventoryView({
         </Card>
       )}
 
-      <BottomSheet open={addOpen} onClose={() => setAddOpen(false)} title={t("inv.modal.title")}>
+      <BottomSheet open={addOpen} onClose={() => { setAddOpen(false); setEditingItemId(null); }} title={t("inv.modal.title")}>
         <form onSubmit={handleCreate} className="space-y-4">
           <Input label={t("inv.modal.itemName")} required placeholder={t("inv.modal.itemPlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">

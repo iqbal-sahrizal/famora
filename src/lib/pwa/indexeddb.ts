@@ -39,11 +39,13 @@ function openPwaDb(): Promise<IDBDatabase> {
 export async function writeOfflineCache<T>(
   familyId: string,
   domain: OfflineCacheDomain,
-  data: T
+  data: T,
+  userId?: string | null
 ): Promise<void> {
   const entry: OfflineCacheEntry<T> = {
     key: `${familyId}:${domain}`,
     familyId,
+    userId: userId ?? null,
     domain,
     data,
     cachedAt: new Date().toISOString(),
@@ -65,21 +67,29 @@ export async function writeOfflineCache<T>(
 
 export async function readOfflineCache<T>(
   familyId: string,
-  domain: OfflineCacheDomain
+  domain: OfflineCacheDomain,
+  userId?: string | null
 ): Promise<OfflineCacheEntry<T> | null> {
   const key = `${familyId}:${domain}`;
+  let entry: OfflineCacheEntry<T> | null = null;
+
   if (!hasIndexedDb()) {
-    return (memoryCacheStore.get(key) as OfflineCacheEntry<T> | undefined) ?? null;
+    entry =
+      (memoryCacheStore.get(key) as OfflineCacheEntry<T> | undefined) ?? null;
+  } else {
+    const db = await openPwaDb();
+    entry = await new Promise<OfflineCacheEntry<T> | null>((resolve, reject) => {
+      const tx = db.transaction(STORE_CACHE, "readonly");
+      const req = tx.objectStore(STORE_CACHE).get(key);
+      req.onsuccess = () =>
+        resolve((req.result as OfflineCacheEntry<T> | undefined) ?? null);
+      req.onerror = () => reject(req.error);
+    });
   }
 
-  const db = await openPwaDb();
-  return new Promise<OfflineCacheEntry<T> | null>((resolve, reject) => {
-    const tx = db.transaction(STORE_CACHE, "readonly");
-    const req = tx.objectStore(STORE_CACHE).get(key);
-    req.onsuccess = () =>
-      resolve((req.result as OfflineCacheEntry<T> | undefined) ?? null);
-    req.onerror = () => reject(req.error);
-  });
+  if (!entry || entry.familyId !== familyId) return null;
+  if (userId && entry.userId && entry.userId !== userId) return null;
+  return entry;
 }
 
 export async function putOutboxRecord(
@@ -149,6 +159,23 @@ export async function clearOfflineCache(): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+export async function clearOfflineOutbox(): Promise<void> {
+  memoryOutboxStore.clear();
+  if (!hasIndexedDb()) return;
+
+  const db = await openPwaDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_OUTBOX, "readwrite");
+    tx.objectStore(STORE_OUTBOX).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function clearAllPwaStorage(): Promise<void> {
+  await Promise.all([clearOfflineCache(), clearOfflineOutbox()]);
 }
 
 export function clearMemoryPwaStoresForTests(): void {

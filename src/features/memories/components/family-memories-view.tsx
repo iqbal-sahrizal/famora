@@ -38,9 +38,11 @@ import { useLocale } from "@/providers/locale-provider";
 import {
   createAlbumAction,
   createMemoryAction,
+  deleteAlbumAction,
   deleteMemoryAction,
   getMemorySignedUrlAction,
   toggleMemoryFavoriteAction,
+  updateAlbumAction,
   updateAlbumSharingAction,
   updateMemoryAction,
 } from "../actions";
@@ -131,6 +133,14 @@ export function FamilyMemoriesView({
   const [albumEvent, setAlbumEvent] = React.useState("");
   const [albumVisibility, setAlbumVisibility] =
     React.useState<MemoryVisibility>("family");
+
+  // Edit album sheet
+  const [editingAlbum, setEditingAlbum] = React.useState<MemoryAlbumItem | null>(
+    null
+  );
+  const [editAlbumTitle, setEditAlbumTitle] = React.useState("");
+  const [editAlbumDesc, setEditAlbumDesc] = React.useState("");
+  const [editAlbumEvent, setEditAlbumEvent] = React.useState("");
 
   // Album sharing sheet
   const [sharingAlbum, setSharingAlbum] = React.useState<MemoryAlbumItem | null>(
@@ -509,18 +519,51 @@ export function FamilyMemoriesView({
                     </Badge>
                     {(data.canManage ||
                       album.createdByMemberId === data.currentMemberId) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSharingAlbum(album);
-                          setShareVisibility(album.visibility);
-                          setShareMemberIds(album.sharedWithMemberIds);
-                        }}
-                        className="inline-flex items-center gap-1 font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                        Sharing
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label={`${t("common.edit")} ${album.title}`}
+                          onClick={() => {
+                            setEditingAlbum(album);
+                            setEditAlbumTitle(album.title);
+                            setEditAlbumDesc(album.description);
+                            setEditAlbumEvent(album.eventName);
+                          }}
+                          className="rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`${t("common.delete")} ${album.title}`}
+                          onClick={async () => {
+                            const r = await deleteAlbumAction({
+                              familyId,
+                              albumId: album.id,
+                            });
+                            if (!r.ok) toast.error(te(r.error));
+                            else {
+                              if (selectedAlbumId === album.id) setSelectedAlbumId(null);
+                              router.refresh();
+                            }
+                          }}
+                          className="rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSharingAlbum(album);
+                            setShareVisibility(album.visibility);
+                            setShareMemberIds(album.sharedWithMemberIds);
+                          }}
+                          className="inline-flex items-center gap-1 font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                          Sharing
+                        </button>
+                      </div>
                     )}
                   </div>
                 </Card>
@@ -1144,6 +1187,55 @@ export function FamilyMemoriesView({
             {t("memories.modal.markImportantShort")}
           </label>
           <Button type="submit" className="w-full" isLoading={savingMemEdit}>
+            {t("memories.modal.saveChanges")}
+          </Button>
+        </form>
+      </BottomSheet>
+
+      {/* Edit Album Sheet */}
+      <BottomSheet
+        open={Boolean(editingAlbum)}
+        onClose={() => setEditingAlbum(null)}
+        title={t("memories.modal.createAlbumTitle")}
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!editingAlbum || submitting) return;
+            setSubmitting(true);
+            const r = await updateAlbumAction({
+              familyId,
+              albumId: editingAlbum.id,
+              title: editAlbumTitle,
+              description: editAlbumDesc,
+              eventName: editAlbumEvent,
+            });
+            setSubmitting(false);
+            if (!r.ok) toast.error(te(r.error));
+            else {
+              setEditingAlbum(null);
+              router.refresh();
+            }
+          }}
+          className="space-y-4"
+        >
+          <Input
+            label={t("memories.modal.titleLabel")}
+            required
+            value={editAlbumTitle}
+            onChange={(e) => setEditAlbumTitle(e.target.value)}
+          />
+          <Input
+            label={t("memories.editCaptionPlaceholder")}
+            value={editAlbumDesc}
+            onChange={(e) => setEditAlbumDesc(e.target.value)}
+          />
+          <Input
+            label={t("memories.modal.eventLabel")}
+            value={editAlbumEvent}
+            onChange={(e) => setEditAlbumEvent(e.target.value)}
+          />
+          <Button type="submit" className="w-full" isLoading={submitting}>
             {t("memories.modal.saveChanges")}
           </Button>
         </form>

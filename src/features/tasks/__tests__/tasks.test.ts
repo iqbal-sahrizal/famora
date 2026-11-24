@@ -15,6 +15,20 @@ const insertedTasks: Array<Record<string, unknown>> = [];
 const insertedAssignees: Array<Record<string, unknown>> = [];
 const insertedNotifications: Array<Record<string, unknown>> = [];
 const insertedHistory: Array<Record<string, unknown>> = [];
+let mockTaskUpdateRow: { id: string } | null = { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" };
+let mockExistingTask: Record<string, unknown> | null = {
+  id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  status: "todo",
+  title: "Take out trash",
+  description: "",
+  category: "chores",
+  priority: "normal",
+  due_at: "2026-11-23T17:00:00.000Z",
+  points_value: 15,
+  recurrence_rule: "weekly",
+  assigned_member_id: "mem-1",
+};
+let mockAssigneeRow: { member_id: string } | null = null;
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: vi.fn(async () => ({
@@ -47,18 +61,9 @@ vi.mock("@/lib/supabase/server", () => ({
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: {
-                    title: "Take out trash",
-                    description: "",
-                    category: "chores",
-                    priority: "normal",
-                    due_at: "2026-11-23T17:00:00.000Z",
-                    points_value: 15,
-                    recurrence_rule: "weekly",
-                    assigned_member_id: "mem-1",
-                  },
-                }),
+                maybeSingle: vi.fn(async () => ({
+                  data: mockExistingTask,
+                })),
               }),
             }),
           }),
@@ -75,13 +80,33 @@ vi.mock("@/lib/supabase/server", () => ({
           }),
           update: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockResolvedValue({ error: null }),
+              eq: vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn(async () => ({ data: mockTaskUpdateRow, error: null })),
+                }),
+              }),
+            }),
+          }),
+          delete: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn(async () => ({ data: mockTaskUpdateRow, error: null })),
+                }),
+              }),
             }),
           }),
         };
       }
       if (table === "task_assignees") {
         return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn(async () => ({ data: mockAssigneeRow })),
+              }),
+            }),
+          }),
           delete: vi.fn().mockReturnValue({
             eq: vi.fn().mockResolvedValue({ error: null }),
           }),
@@ -115,7 +140,7 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }));
 
-import { saveTaskAction, toggleTaskStatusAction } from "../actions";
+import { deleteTaskAction, saveTaskAction, toggleTaskStatusAction } from "../actions";
 
 const FAM_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const MEM_A = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -183,5 +208,68 @@ describe("Famora Family Tasks — Authorization, Integrations & Recurrence", () 
     expect(insertedTasks).toHaveLength(1);
     expect(insertedTasks[0].due_at).toBe("2026-11-30T17:00:00.000Z");
     expect(insertedHistory[0].event_type).toBe("status.done");
+  });
+
+  it("BUG-009: is idempotent when task is already in target status and blocks unauthorized toggle/delete", async () => {
+    // 1. Idempotency: task already 'done' should not re-spawn recurring task or duplicate history
+    mockExistingTask = {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      status: "done",
+      title: "Take out trash",
+      description: "",
+      category: "chores",
+      priority: "normal",
+      due_at: "2026-11-23T17:00:00.000Z",
+      points_value: 15,
+      recurrence_rule: "weekly",
+      assigned_member_id: "mem-1",
+    };
+    const idemRes = await toggleTaskStatusAction({
+      familyId: FAM_ID,
+      taskId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      nextStatus: "done",
+    });
+    expect(idemRes.ok).toBe(true);
+    expect(insertedTasks).toHaveLength(0);
+    expect(insertedHistory).toHaveLength(0);
+
+    // 2. Unauthorized non-assignee cannot toggle task without tasks.manage_all
+    mockPerms = [{ permission_key: "family.members.view" }];
+    mockExistingTask = {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      status: "todo",
+      title: "Take out trash",
+      description: "",
+      category: "chores",
+      priority: "normal",
+      due_at: null,
+      points_value: 0,
+      recurrence_rule: null,
+      assigned_member_id: "mem-other",
+    };
+    mockAssigneeRow = null;
+    const unauthToggle = await toggleTaskStatusAction({
+      familyId: FAM_ID,
+      taskId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      nextStatus: "done",
+    });
+    expect(unauthToggle.ok).toBe(false);
+
+    // 3. Unauthorized member cannot delete task
+    const unauthDelete = await deleteTaskAction({
+      familyId: FAM_ID,
+      taskId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    });
+    expect(unauthDelete.ok).toBe(false);
+    expect(unauthDelete.error).toContain("tasks.manage_all");
+
+    // 4. 0-row RLS rejection on delete returns ok: false
+    mockPerms = [{ permission_key: "tasks.manage_all" }];
+    mockTaskUpdateRow = null;
+    const missingDelete = await deleteTaskAction({
+      familyId: FAM_ID,
+      taskId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    });
+    expect(missingDelete.ok).toBe(false);
   });
 });

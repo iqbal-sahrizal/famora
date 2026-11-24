@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireAuthenticatedUser } from "@/features/auth/server";
 import { routes } from "@/lib/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -193,6 +194,169 @@ export async function redeemRewardAction(params: {
       ok: false,
       error: err instanceof Error ? err.message : "Could not redeem reward.",
     };
+  }
+}
+
+export async function updateChoreTemplateAction(
+  input: ChoreTemplateInput & { templateId: string }
+): Promise<ChoresActionResult> {
+  await requireAuthenticatedUser();
+  const parsed = choreTemplateSchema
+    .extend({ templateId: z.string().uuid() })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid chore." };
+  }
+  try {
+    if (!(await hasApproverPermission(parsed.data.familyId))) {
+      return { ok: false, error: "Missing permission: tasks.approve_chores" };
+    }
+    const supabase = await createSupabaseServerClient();
+    const { data: updated, error } = await supabase
+      .from("chore_templates")
+      .update({
+        title: parsed.data.title,
+        description: parsed.data.description,
+        default_points: parsed.data.defaultPoints,
+        schedule_rule: parsed.data.scheduleRule,
+        category: parsed.data.category,
+        assigned_member_id: parsed.data.assignedMemberId,
+      })
+      .eq("id", parsed.data.templateId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!updated) return { ok: false, error: "Chore template not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "chores"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update chore." };
+  }
+}
+
+export async function deleteChoreTemplateAction(params: {
+  familyId: string;
+  templateId: string;
+}): Promise<ChoresActionResult> {
+  await requireAuthenticatedUser();
+  const parsed = z
+    .object({ familyId: z.string().uuid(), templateId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid chore reference." };
+  try {
+    if (!(await hasApproverPermission(parsed.data.familyId))) {
+      return { ok: false, error: "Missing permission: tasks.approve_chores" };
+    }
+    const supabase = await createSupabaseServerClient();
+    const { data: deleted, error } = await supabase
+      .from("chore_templates")
+      .delete()
+      .eq("id", parsed.data.templateId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Chore template not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "chores"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete chore." };
+  }
+}
+
+export async function updateRewardAction(
+  input: RewardItemInput & { rewardId: string }
+): Promise<ChoresActionResult> {
+  await requireAuthenticatedUser();
+  const parsed = rewardItemSchema
+    .extend({ rewardId: z.string().uuid() })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid reward." };
+  }
+  try {
+    if (!(await hasApproverPermission(parsed.data.familyId))) {
+      return { ok: false, error: "Missing permission: tasks.approve_chores" };
+    }
+    const supabase = await createSupabaseServerClient();
+    const { data: updated, error } = await supabase
+      .from("reward_catalog")
+      .update({
+        title: parsed.data.title,
+        description: parsed.data.description,
+        cost_points: parsed.data.costPoints,
+      })
+      .eq("id", parsed.data.rewardId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!updated) return { ok: false, error: "Reward not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "chores"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to update reward." };
+  }
+}
+
+export async function deleteRewardAction(params: {
+  familyId: string;
+  rewardId: string;
+}): Promise<ChoresActionResult> {
+  await requireAuthenticatedUser();
+  const parsed = z
+    .object({ familyId: z.string().uuid(), rewardId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid reward reference." };
+  try {
+    if (!(await hasApproverPermission(parsed.data.familyId))) {
+      return { ok: false, error: "Missing permission: tasks.approve_chores" };
+    }
+    const supabase = await createSupabaseServerClient();
+    const { data: deleted, error } = await supabase
+      .from("reward_catalog")
+      .delete()
+      .eq("id", parsed.data.rewardId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Reward not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "chores"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete reward." };
+  }
+}
+
+export async function deleteFamilyChallengeAction(params: {
+  familyId: string;
+  challengeId: string;
+}): Promise<ChoresActionResult> {
+  await requireAuthenticatedUser();
+  const parsed = z
+    .object({ familyId: z.string().uuid(), challengeId: z.string().uuid() })
+    .safeParse(params);
+  if (!parsed.success) return { ok: false, error: "Invalid challenge reference." };
+  try {
+    if (!(await hasApproverPermission(parsed.data.familyId))) {
+      return { ok: false, error: "Missing permission: tasks.approve_chores" };
+    }
+    const supabase = await createSupabaseServerClient();
+    const { data: deleted, error } = await supabase
+      .from("family_challenges")
+      .delete()
+      .eq("id", parsed.data.challengeId)
+      .eq("family_id", parsed.data.familyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!deleted) return { ok: false, error: "Challenge not found." };
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "chores"));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to delete challenge." };
   }
 }
 

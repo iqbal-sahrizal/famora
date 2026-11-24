@@ -58,15 +58,46 @@ export async function getAnalyticsPageData(
     const canManageTransactions = permSet.has("finance.transactions.manage");
     if (!canManageAccounts && !canManageTransactions) return denied;
 
-    const [{ data: fam }, { data: txData }, { data: goalsData }, { data: debtsData }] =
-      await Promise.all([
-        supabase.from("families").select("currency_code").eq("id", familyId).maybeSingle(),
-        supabase
+    const windowStart = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    const PAGE_SIZE = 1000;
+    const MAX_PAGES = 50;
+    type RawAnalyticsTxRow = {
+      id: string;
+      merchant: string;
+      category: string;
+      kind: "income" | "expense" | "transfer";
+      amount_numeric: string | number;
+      occurred_on: string;
+      is_reversed: boolean;
+    };
+
+    const fetchAllWindowedTransactions = async (): Promise<RawAnalyticsTxRow[]> => {
+      const rows: RawAnalyticsTxRow[] = [];
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+        const { data: batch, error } = await supabase
           .from("finance_transactions")
           .select("id, merchant, category, kind, amount_numeric, occurred_on, is_reversed")
           .eq("family_id", familyId)
+          .gte("occurred_on", windowStart)
           .order("occurred_on", { ascending: false })
-          .limit(300),
+          .order("id", { ascending: false })
+          .range(from, to);
+        if (error || !batch || batch.length === 0) break;
+        rows.push(...(batch as RawAnalyticsTxRow[]));
+        if (batch.length < PAGE_SIZE) break;
+      }
+      return rows;
+    };
+
+    const [{ data: fam }, txData, { data: goalsData }, { data: debtsData }] =
+      await Promise.all([
+        supabase.from("families").select("currency_code").eq("id", familyId).maybeSingle(),
+        fetchAllWindowedTransactions(),
         supabase
           .from("finance_goals")
           .select("id, title, target_numeric, current_numeric, target_date, status")

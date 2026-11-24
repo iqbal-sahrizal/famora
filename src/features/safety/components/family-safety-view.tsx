@@ -69,12 +69,25 @@ export function FamilySafetyView({
   const [areaText, setAreaText] = React.useState("");
   const [statusLabel, setStatusLabel] = React.useState("");
   const [durationMins, setDurationMins] = React.useState("60");
+  const [busy, setBusy] = React.useState(false);
   const [selectedViewerIds, setSelectedViewerIds] = React.useState<string[]>(
     () =>
       data.members
         .filter((m) => m.id !== data.currentMemberId)
         .map((m) => m.id)
   );
+
+  React.useEffect(() => {
+    const validIds = new Set(
+      data.members
+        .filter((m) => m.id !== data.currentMemberId)
+        .map((m) => m.id)
+    );
+    setSelectedViewerIds((prev) => {
+      const filtered = prev.filter((id) => validIds.has(id));
+      return filtered.length > 0 ? filtered : Array.from(validIds);
+    });
+  }, [data.members, data.currentMemberId]);
 
   if (!data.canView) {
     return (
@@ -90,6 +103,8 @@ export function FamilySafetyView({
 
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     const res = await createSafetyContactAction({
       familyId,
       contactType,
@@ -99,6 +114,7 @@ export function FamilySafetyView({
       notes: contactNotes,
       isPrimary: contactType === "emergency",
     });
+    setBusy(false);
     if (!res.ok) {
       toast.error(te(res.error));
       return;
@@ -114,12 +130,15 @@ export function FamilySafetyView({
 
   const handleAddProtocol = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     const res = await createSafetyProtocolAction({
       familyId,
       category: protoCat,
       title: protoTitle,
       content: protoContent,
     });
+    setBusy(false);
     if (!res.ok) {
       toast.error(te(res.error));
       return;
@@ -133,6 +152,8 @@ export function FamilySafetyView({
 
   const handleEnableLocation = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     const res = await enableLocationShareAction({
       familyId,
       consentAcknowledged: consentChecked,
@@ -141,6 +162,7 @@ export function FamilySafetyView({
       statusLabel: statusLabel.trim() || t("safety.modal.defaultStatus"),
       approximateArea: areaText,
     });
+    setBusy(false);
     if (!res.ok) {
       toast.error(te(res.error));
       return;
@@ -152,7 +174,10 @@ export function FamilySafetyView({
   };
 
   const handleRevokeLocation = async () => {
+    if (busy) return;
+    setBusy(true);
     const res = await revokeLocationShareAction({ familyId });
+    setBusy(false);
     if (!res.ok) {
       toast.error(te(res.error));
       return;
@@ -289,15 +314,22 @@ export function FamilySafetyView({
                   {data.canManage && (
                     <button
                       type="button"
+                      disabled={busy}
                       aria-label={t("safety.deleteContactAria")}
                       onClick={async () => {
-                        await deleteSafetyContactAction({
+                        setBusy(true);
+                        const res = await deleteSafetyContactAction({
                           familyId,
                           contactId: c.id,
                         });
+                        setBusy(false);
+                        if (!res.ok) {
+                          toast.error(te(res.error));
+                          return;
+                        }
                         router.refresh();
                       }}
-                      className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                      className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer disabled:opacity-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -337,15 +369,22 @@ export function FamilySafetyView({
                   {data.canManage && (
                     <button
                       type="button"
+                      disabled={busy}
                       aria-label={t("safety.deleteContactAria")}
                       onClick={async () => {
-                        await deleteSafetyContactAction({
+                        setBusy(true);
+                        const res = await deleteSafetyContactAction({
                           familyId,
                           contactId: c.id,
                         });
+                        setBusy(false);
+                        if (!res.ok) {
+                          toast.error(te(res.error));
+                          return;
+                        }
                         router.refresh();
                       }}
-                      className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer"
+                      className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--tint-peach)] cursor-pointer disabled:opacity-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

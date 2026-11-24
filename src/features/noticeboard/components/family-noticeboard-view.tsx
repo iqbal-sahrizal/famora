@@ -31,12 +31,16 @@ import { cn } from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
 import {
   castPollVoteAction,
+  closePollAction,
   createAnnouncementAction,
   createPollAction,
   deleteAnnouncementAction,
+  deletePollAction,
+  getAnnouncementAttachmentSignedUrlAction,
   markAnnouncementReadAction,
   toggleAnnouncementArchiveAction,
   updateAnnouncementAction,
+  uploadAnnouncementAttachmentAction,
 } from "../actions";
 import type { NoticeboardAnnouncement, NoticeboardData, NoticeboardPoll } from "../server";
 
@@ -60,6 +64,7 @@ export function FamilyNoticeboardView({
   const [annAudience, setAnnAudience] = React.useState<"all" | "adults_only" | "children_teens">("all");
   const [annPinned, setAnnPinned] = React.useState(false);
   const [annAttachment, setAnnAttachment] = React.useState("");
+  const [annFile, setAnnFile] = React.useState<File | null>(null);
 
   // Edit / Delete Announcement state
   const [editAnn, setEditAnn] = React.useState<NoticeboardAnnouncement | null>(null);
@@ -85,14 +90,33 @@ export function FamilyNoticeboardView({
 
   const handlePublishAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
+    let attachmentStoragePath: string | null = null;
+    let attachmentName = annAttachment.trim() || undefined;
+
+    if (annFile) {
+      const formData = new FormData();
+      formData.set("familyId", familyId);
+      formData.set("file", annFile);
+      const upRes = await uploadAnnouncementAttachmentAction(formData);
+      if (!upRes.ok) {
+        setBusy(false);
+        toast.error(te(upRes.error));
+        return;
+      }
+      attachmentStoragePath = upRes.storagePath ?? null;
+      attachmentName = upRes.fileName ?? annFile.name;
+    }
+
     const res = await createAnnouncementAction({
       familyId,
       title: annTitle,
       body: annBody,
       audience: annAudience,
       pinned: annPinned,
-      attachmentName: annAttachment.trim() || undefined,
+      attachmentName,
+      attachmentStoragePath,
     });
     setBusy(false);
     if (!res.ok) toast.error(te(res.error));
@@ -100,6 +124,7 @@ export function FamilyNoticeboardView({
       setAnnTitle("");
       setAnnBody("");
       setAnnAttachment("");
+      setAnnFile(null);
       setAnnOpen(false);
       toast.success(t("noticeboard.toast.published"));
       router.refresh();
@@ -302,11 +327,32 @@ export function FamilyNoticeboardView({
 
                 {ann.attachments.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {ann.attachments.map((att) => (
-                      <Badge key={att.name} variant="neutral">
-                        <Paperclip className="h-3 w-3" /> {att.name}
-                      </Badge>
-                    ))}
+                    {ann.attachments.map((att) =>
+                      ann.attachmentStoragePath ? (
+                        <button
+                          key={att.name}
+                          type="button"
+                          onClick={async () => {
+                            const r = await getAnnouncementAttachmentSignedUrlAction({
+                              familyId,
+                              announcementId: ann.id,
+                            });
+                            if (!r.ok || !r.url) {
+                              toast.error(te(r.error));
+                              return;
+                            }
+                            window.open(r.url, "_blank", "noopener,noreferrer");
+                          }}
+                          className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-subtle)] px-3 py-1 text-[12px] font-medium text-[var(--accent-primary)] hover:underline cursor-pointer"
+                        >
+                          <Paperclip className="h-3 w-3" /> {att.name}
+                        </button>
+                      ) : (
+                        <Badge key={att.name} variant="neutral">
+                          <Paperclip className="h-3 w-3" /> {att.name}
+                        </Badge>
+                      )
+                    )}
                   </div>
                 )}
 
@@ -338,7 +384,7 @@ export function FamilyNoticeboardView({
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Edit ${ann.title}`}
+                          aria-label={`${t("common.edit")} ${ann.title}`}
                           onClick={() => openEditAnnouncement(ann)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -347,7 +393,7 @@ export function FamilyNoticeboardView({
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Delete ${ann.title}`}
+                          aria-label={`${t("common.delete")} ${ann.title}`}
                           onClick={() => setDeleteAnnTarget(ann)}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
@@ -355,7 +401,7 @@ export function FamilyNoticeboardView({
                         </Button>
                       </>
                     )}
-                    {data.canPublish && (
+                    {ann.canEditOrDelete && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -368,6 +414,8 @@ export function FamilyNoticeboardView({
                           if (r.ok) {
                             toast.success(ann.isArchived ? t("noticeboard.restoredToast") : t("noticeboard.archivedToast"));
                             router.refresh();
+                          } else if (r.error) {
+                            toast.error(te(r.error));
                           }
                         }}
                       >
@@ -478,6 +526,48 @@ export function FamilyNoticeboardView({
                       {poll.mySelectedOptionIds.length > 0 ? t("noticeboard.updateVoteBtn") : t("noticeboard.submitVoteBtn")}
                     </Button>
                   )}
+
+                  {poll.canEditOrDelete && (
+                    <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          const r = await closePollAction({
+                            familyId,
+                            pollId: poll.id,
+                            isClosed: !poll.isClosed,
+                          });
+                          setBusy(false);
+                          if (!r.ok) toast.error(te(r.error));
+                          else router.refresh();
+                        }}
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                        {poll.isClosed ? t("noticeboard.restoreBtn") : t("common.close")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          const r = await deletePollAction({
+                            familyId,
+                            pollId: poll.id,
+                          });
+                          setBusy(false);
+                          if (!r.ok) toast.error(te(r.error));
+                          else router.refresh();
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-[var(--accent-danger)]" />
+                        {t("common.delete")}
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               );
             })
@@ -522,12 +612,17 @@ export function FamilyNoticeboardView({
               { value: "children_teens", label: t("noticeboard.audience.parentsChildren") },
             ]}
           />
-          <Input
-            label={t("noticeboard.modal.attachmentLabel")}
-            placeholder={t("noticeboard.attachmentPlaceholder")}
-            value={annAttachment}
-            onChange={(e) => setAnnAttachment(e.target.value)}
-          />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13.5px] font-medium">
+              {t("noticeboard.modal.attachmentLabel")}
+            </label>
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              onChange={(e) => setAnnFile(e.target.files?.[0] ?? null)}
+              className="block w-full rounded-xl bg-[var(--bg-subtle)] p-2.5 text-[13.5px] file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent-primary)] file:px-3 file:py-1.5 file:text-[12.5px] file:font-medium file:text-white"
+            />
+          </div>
           <label className="flex items-center gap-2 text-[13.5px] font-medium cursor-pointer">
             <input
               type="checkbox"

@@ -14,9 +14,26 @@ vi.mock("@/features/auth/server", () => ({
 }));
 
 let mockPerms: Array<{ permission_key: string }> = [];
+let mockRangeBatches: Array<Array<Record<string, unknown>>> = [];
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: vi.fn(async () => ({
     rpc: vi.fn(async () => ({ data: mockPerms, error: null })),
+    from: vi.fn((table: string) => {
+      const chain: Record<string, unknown> = {
+        select: vi.fn(() => chain),
+        eq: vi.fn(() => chain),
+        gte: vi.fn(() => chain),
+        order: vi.fn(() => chain),
+        maybeSingle: vi.fn(async () => ({ data: { currency_code: "IDR" }, error: null })),
+        range: vi.fn(async (from: number) => {
+          const pageIdx = Math.floor(from / 1000);
+          return { data: mockRangeBatches[pageIdx] ?? [], error: null };
+        }),
+        then: (resolve: (v: unknown) => void) =>
+          resolve({ data: table === "finance_transactions" ? [] : [], error: null }),
+      };
+      return chain;
+    }),
   })),
 }));
 
@@ -62,5 +79,35 @@ describe("Famora Financial Analytics & Goals", () => {
     const res = await getAnalyticsPageData("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     expect(res.authorized).toBe(false);
     expect(res.transactions).toEqual([]);
+  });
+
+  it("paginates analytics transactions across ranges instead of truncating at a single limit", async () => {
+    mockPerms = [{ permission_key: "finance.transactions.manage" }];
+    const page0 = Array.from({ length: 1000 }, (_, i) => ({
+      id: `tx-0-${i}`,
+      merchant: "Shop",
+      category: "Groceries",
+      kind: "expense",
+      amount_numeric: "10.00",
+      occurred_on: "2026-11-01",
+      is_reversed: false,
+    }));
+    const page1 = [
+      {
+        id: "tx-1-0",
+        merchant: "Bonus",
+        category: "Salary",
+        kind: "income",
+        amount_numeric: "2500.00",
+        occurred_on: "2026-11-10",
+        is_reversed: false,
+      },
+    ];
+    mockRangeBatches = [page0, page1];
+
+    const res = await getAnalyticsPageData("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(res.authorized).toBe(true);
+    expect(res.transactions).toHaveLength(1001);
+    expect(res.transactions[1000]?.id).toBe("tx-1-0");
   });
 });

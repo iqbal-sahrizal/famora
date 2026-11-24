@@ -81,6 +81,7 @@ export async function sendAiPromptAction(input: {
   }
 
   let conversationId = parsed.data.conversationId;
+  let history: Array<{ role: "user" | "assistant"; content: string }> = [];
   if (!conversationId) {
     const { data: conv, error: convErr } = await supabase
       .from("ai_conversations")
@@ -108,17 +109,16 @@ export async function sendAiPromptAction(input: {
     if (!existingConv) {
       return { ok: false, error: "Conversation not found." };
     }
-  }
 
-  const { error: userMsgErr } = await supabase.from("ai_messages").insert({
-    family_id: parsed.data.familyId,
-    conversation_id: conversationId,
-    member_id: actor.id,
-    role: "user",
-    content: parsed.data.prompt,
-  });
-  if (userMsgErr) {
-    return { ok: false, error: userMsgErr.message };
+    const { data: priorRows } = await supabase
+      .from("ai_messages")
+      .select("role, content")
+      .eq("conversation_id", conversationId)
+      .eq("family_id", parsed.data.familyId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    history = ((priorRows ?? []) as Array<{ role: "user" | "assistant"; content: string }>).reverse();
   }
 
   const context = await retrieveAuthorizedFamilyContext({
@@ -131,7 +131,19 @@ export async function sendAiPromptAction(input: {
     prompt: parsed.data.prompt,
     context,
     permissions: permSet,
+    history,
   });
+
+  const { error: userMsgErr } = await supabase.from("ai_messages").insert({
+    family_id: parsed.data.familyId,
+    conversation_id: conversationId,
+    member_id: actor.id,
+    role: "user",
+    content: parsed.data.prompt,
+  });
+  if (userMsgErr) {
+    return { ok: false, error: userMsgErr.message };
+  }
 
   const { data: assistantMsg, error: msgErr } = await supabase
     .from("ai_messages")
@@ -221,6 +233,21 @@ export async function confirmAiProposedAction(input: {
   if (msg.proposed_action.actionType === "create_shopping_items" && !permSet.has("shopping.manage")) {
     return { ok: false, error: "Missing permission: shopping.manage" };
   }
+  if (msg.proposed_action.actionType === "create_task" && !permSet.has("tasks.manage_all")) {
+    return { ok: false, error: "Missing permission: tasks.manage_all" };
+  }
+  if (msg.proposed_action.actionType === "create_calendar_event" && !permSet.has("calendar.family.manage")) {
+    return { ok: false, error: "Missing permission: calendar.family.manage" };
+  }
+
+  const supportedTypes = new Set([
+    "create_shopping_items",
+    "create_task",
+    "create_calendar_event",
+  ]);
+  if (!supportedTypes.has(msg.proposed_action.actionType)) {
+    return { ok: false, error: "This proposed action type is not supported yet." };
+  }
 
   const { data: claimed, error: claimErr } = await supabase
     .from("ai_messages")
@@ -235,6 +262,14 @@ export async function confirmAiProposedAction(input: {
   if (claimErr || !claimed) {
     return { ok: false, error: claimErr?.message ?? "No pending action found." };
   }
+
+  const revertPending = async () => {
+    await supabase
+      .from("ai_messages")
+      .update({ action_status: "pending_confirmation" })
+      .eq("id", msg.id)
+      .eq("family_id", parsed.data.familyId);
+  };
 
   if (msg.proposed_action.actionType === "create_shopping_items") {
     const items =
@@ -255,12 +290,64 @@ export async function confirmAiProposedAction(input: {
           unit: "pcs",
         }))
       );
-      if (insertErr) return { ok: false, error: insertErr.message };
+      if (insertErr) {
+        await revertPending();
+        return { ok: false, error: insertErr.message };
+      }
     }
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
+  } else if (msg.proposed_action.actionType === "create_task") {
+    const p = msg.proposed_action.payload;
+    const title = String(p.title ?? "").trim();
+    if (!title) {
+      await revertPending();
+      return { ok: false, error: "Invalid task title in proposed action." };
+    }
+    const { error: taskErr } = await supabase.from("tasks").insert({
+      family_id: parsed.data.familyId,
+      created_by_member_id: actor.id,
+      title,
+      description: String(p.description ?? ""),
+      category: String(p.category ?? "household"),
+      priority: String(p.priority ?? "normal"),
+      due_at: p.dueAt ? String(p.dueAt) : null,
+      status: "todo",
+    });
+    if (taskErr) {
+      await revertPending();
+      return { ok: false, error: taskErr.message };
+    }
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "tasks"));
+  } else if (msg.proposed_action.actionType === "create_calendar_event") {
+    const p = msg.proposed_action.payload;
+    const title = String(p.title ?? "").trim();
+    const startAt = String(p.startAt ?? "");
+    const endAt = String(p.endAt ?? "");
+    if (!title || !startAt || !endAt) {
+      await revertPending();
+      return { ok: false, error: "Invalid calendar event details in proposed action." };
+    }
+    const { error: calErr } = await supabase.from("calendar_events").insert({
+      family_id: parsed.data.familyId,
+      created_by_member_id: actor.id,
+      title,
+      description: String(p.description ?? ""),
+      location: String(p.location ?? ""),
+      start_at: startAt,
+      end_at: endAt,
+      all_day: Boolean(p.allDay),
+      category: String(p.category ?? "family"),
+      visibility: "family",
+    });
+    if (calErr) {
+      await revertPending();
+      return { ok: false, error: calErr.message };
+    }
+    revalidatePath(routes.familyDomain(parsed.data.familyId, "calendar"));
   }
 
   revalidatePath(routes.familyDomain(parsed.data.familyId, "ai"));
-  revalidatePath(routes.familyDomain(parsed.data.familyId, "shopping"));
+  revalidatePath(routes.familyDashboard(parsed.data.familyId));
   return { ok: true };
 }
 

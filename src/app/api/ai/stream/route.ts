@@ -98,6 +98,54 @@ export async function POST(request: Request) {
       );
     }
 
+    let conversationId = parsed.data.conversationId ?? null;
+    let history: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+    if (!conversationId) {
+      const { data: conv, error: convErr } = await supabase
+        .from("ai_conversations")
+        .insert({
+          family_id: parsed.data.familyId,
+          member_id: actor.id,
+          title: parsed.data.prompt.slice(0, 80),
+        })
+        .select("id")
+        .single<{ id: string }>();
+
+      if (convErr || !conv) {
+        return NextResponse.json(
+          { error: convErr?.message ?? "Could not start conversation." },
+          { status: 500 }
+        );
+      }
+      conversationId = conv.id;
+    } else {
+      const { data: existingConv } = await supabase
+        .from("ai_conversations")
+        .select("id")
+        .eq("id", conversationId)
+        .eq("family_id", parsed.data.familyId)
+        .eq("member_id", actor.id)
+        .maybeSingle<{ id: string }>();
+
+      if (!existingConv) {
+        return NextResponse.json(
+          { error: "Conversation not found." },
+          { status: 404 }
+        );
+      }
+
+      const { data: priorRows } = await supabase
+        .from("ai_messages")
+        .select("role, content")
+        .eq("conversation_id", conversationId)
+        .eq("family_id", parsed.data.familyId)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      history = ((priorRows ?? []) as Array<{ role: "user" | "assistant"; content: string }>).reverse();
+    }
+
     const context = await retrieveAuthorizedFamilyContext({
       familyId: parsed.data.familyId,
       memberName: actor.display_name,
@@ -108,22 +156,59 @@ export async function POST(request: Request) {
       prompt: parsed.data.prompt,
       context,
       permissions: permSet,
+      history,
     });
 
-    const { error: logErr } = await supabase.from("ai_usage_logs").insert({
+    // Persist user + assistant messages only after generation succeeds (prevents orphan user messages)
+    const { error: userMsgErr } = await supabase.from("ai_messages").insert({
       family_id: parsed.data.familyId,
+      conversation_id: conversationId,
       member_id: actor.id,
-      provider_name: result.providerName,
-      model_name: result.modelName,
-      prompt_tokens: result.promptTokens,
-      completion_tokens: result.completionTokens,
-      status: "ok",
+      role: "user",
+      content: parsed.data.prompt,
     });
+    if (userMsgErr) {
+      return NextResponse.json({ error: userMsgErr.message }, { status: 500 });
+    }
+
+    const { data: assistantMsg, error: assistantMsgErr } = await supabase
+      .from("ai_messages")
+      .insert({
+        family_id: parsed.data.familyId,
+        conversation_id: conversationId,
+        member_id: actor.id,
+        role: "assistant",
+        content: result.content,
+        tool_calls: result.toolCalls,
+        proposed_action: result.proposedAction,
+        action_status: result.proposedAction ? "pending_confirmation" : "none",
+        provider_name: result.providerName,
+        model_name: result.modelName,
+      })
+      .select("id")
+      .single<{ id: string }>();
+
+    if (assistantMsgErr) {
+      return NextResponse.json({ error: assistantMsgErr.message }, { status: 500 });
+    }
+
+    const [{ error: logErr }] = await Promise.all([
+      supabase.from("ai_usage_logs").insert({
+        family_id: parsed.data.familyId,
+        member_id: actor.id,
+        provider_name: result.providerName,
+        model_name: result.modelName,
+        prompt_tokens: result.promptTokens,
+        completion_tokens: result.completionTokens,
+        status: "ok",
+      }),
+      supabase
+        .from("ai_conversations")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", conversationId),
+    ]);
     if (logErr) {
-      return NextResponse.json(
-        { error: "Failed to record AI usage log." },
-        { status: 500 }
-      );
+      console.error("Failed to record AI usage log:", logErr.message);
     }
 
     const encoder = new TextEncoder();
@@ -131,16 +216,28 @@ export async function POST(request: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         for (const chunk of chunks) {
-          controller.enqueue(encoder.encode(chunk));
-          await new Promise((r) => setTimeout(r, 12));
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "delta", chunk })}\n\n`)
+          );
+          await new Promise((r) => setTimeout(r, 10));
         }
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
+              type: "done",
+              conversationId,
+              messageId: assistantMsg?.id ?? null,
+              proposedAction: result.proposedAction,
+            })}\n\n`
+          )
+        );
         controller.close();
       },
     });
 
     return new NextResponse(stream, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-store",
       },
     });

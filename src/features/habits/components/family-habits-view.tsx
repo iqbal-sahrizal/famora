@@ -94,6 +94,19 @@ export function FamilyHabitsView({
     [data.habits, filterScope]
   );
 
+  if (!data.canView) {
+    return (
+      <div className="mx-auto max-w-2xl py-10">
+        <Card className="p-6 text-center">
+          <h2 className="font-heading text-lg font-semibold">{t("habits.title")}</h2>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            {te("Active family membership required.")}
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   const personalHabits = filtered.filter((h) => h.scope === "personal");
   const challengeHabits = filtered.filter(
     (h) => h.scope === "family_challenge"
