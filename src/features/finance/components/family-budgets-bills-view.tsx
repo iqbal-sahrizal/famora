@@ -25,7 +25,13 @@ import { EmptyState } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
+import {
+  cn,
+  formatCurrencyInputWithSeparators,
+  formatDecimalStringForInput,
+  getCurrencyPrefix,
+  parseCurrencyInputToDecimal,
+} from "@/lib/utils";
 import { formatLocalizedDate, toIntlLocale } from "@/lib/i18n";
 import { useLocale } from "@/providers/locale-provider";
 import {
@@ -70,7 +76,9 @@ export function FamilyBudgetsBillsView({
   // Budget form
   const [bName, setBName] = React.useState("");
   const [bCategory, setBCategory] = React.useState("Groceries");
-  const [bLimit, setBLimit] = React.useState("600.00");
+  const [bLimit, setBLimit] = React.useState(() =>
+    data.currencyCode === "IDR" ? "600.000" : "600.00"
+  );
   const [bStart, setBStart] = React.useState(() => new Date().toISOString().slice(0, 8) + "01");
   const [bEnd, setBEnd] = React.useState(() => {
     const d = new Date();
@@ -121,6 +129,7 @@ export function FamilyBudgetsBillsView({
     e.preventDefault();
     if (busy) return;
     setBusy(true);
+    const parsedLimit = parseCurrencyInputToDecimal(bLimit, data.currencyCode);
     const res = editingBudgetId
       ? await updateBudgetAction({
           familyId,
@@ -130,7 +139,7 @@ export function FamilyBudgetsBillsView({
           periodType: "monthly",
           periodStart: bStart,
           periodEnd: bEnd,
-          limitNumeric: bLimit,
+          limitNumeric: parsedLimit,
           alertThresholdPct: 80,
         })
       : await createBudgetAction({
@@ -140,7 +149,7 @@ export function FamilyBudgetsBillsView({
           periodType: "monthly",
           periodStart: bStart,
           periodEnd: bEnd,
-          limitNumeric: bLimit,
+          limitNumeric: parsedLimit,
           alertThresholdPct: 80,
         });
     setBusy(false);
@@ -158,6 +167,7 @@ export function FamilyBudgetsBillsView({
     e.preventDefault();
     if (busy) return;
     setBusy(true);
+    const parsedBillAmount = parseCurrencyInputToDecimal(billAmount, data.currencyCode);
     const res = editingBillId
       ? await updateBillAction({
           familyId,
@@ -166,7 +176,7 @@ export function FamilyBudgetsBillsView({
           title: billTitle,
           payee: billPayee,
           category: "Utilities",
-          amountNumeric: billAmount,
+          amountNumeric: parsedBillAmount,
           dueOn: billDue,
           recurrenceFrequency: billFreq,
         })
@@ -176,7 +186,7 @@ export function FamilyBudgetsBillsView({
           title: billTitle,
           payee: billPayee,
           category: "Utilities",
-          amountNumeric: billAmount,
+          amountNumeric: parsedBillAmount,
           dueOn: billDue,
           recurrenceFrequency: billFreq,
         });
@@ -224,7 +234,7 @@ export function FamilyBudgetsBillsView({
       kind: sKind,
       merchant: sMerchant,
       category: sKind === "income" ? "Income" : "Subscriptions",
-      amountNumeric: sAmount,
+      amountNumeric: parseCurrencyInputToDecimal(sAmount, data.currencyCode),
       frequency: sFreq,
       nextRunOn: sNext,
     });
@@ -373,7 +383,12 @@ export function FamilyBudgetsBillsView({
                               setEditingBudgetId(b.id);
                               setBName(b.name);
                               setBCategory(b.category);
-                              setBLimit(b.progress.limitNumeric);
+                              setBLimit(
+                                formatDecimalStringForInput(
+                                  b.progress.limitNumeric,
+                                  data.currencyCode
+                                )
+                              );
                               setBStart(b.periodStart);
                               setBEnd(b.periodEnd);
                               setBudgetOpen(true);
@@ -617,7 +632,24 @@ export function FamilyBudgetsBillsView({
                 bCategory,
               ])}
             />
-            <Input label={t("budgets.modal.limit")} required value={bLimit} onChange={(e) => setBLimit(e.target.value)} className="tabular-nums" />
+            <Input
+              label={t("budgets.modal.limit")}
+              required
+              type="text"
+              inputMode="decimal"
+              leadingIcon={
+                <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
+                  {getCurrencyPrefix(data.currencyCode)}
+                </span>
+              }
+              value={bLimit}
+              onChange={(e) =>
+                setBLimit(
+                  formatCurrencyInputWithSeparators(e.target.value, data.currencyCode)
+                )
+              }
+              className="tabular-nums"
+            />
             <Input label={t("budgets.modal.periodStart")} type="date" value={bStart} onChange={(e) => setBStart(e.target.value)} />
             <Input label={t("budgets.modal.periodEnd")} type="date" value={bEnd} onChange={(e) => setBEnd(e.target.value)} />
           </div>
@@ -630,7 +662,25 @@ export function FamilyBudgetsBillsView({
           <Input label={t("budgets.modal.billName")} required placeholder={t("budgets.modal.billPlaceholder")} value={billTitle} onChange={(e) => setBillTitle(e.target.value)} />
           <Input label={t("budgets.modal.payee")} required placeholder={t("budgets.modal.payeePlaceholder")} value={billPayee} onChange={(e) => setBillPayee(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-3">
-            <Input label={t("budgets.modal.amount")} required placeholder="145.00" value={billAmount} onChange={(e) => setBillAmount(e.target.value)} className="tabular-nums" />
+            <Input
+              label={t("budgets.modal.amount")}
+              required
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              leadingIcon={
+                <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
+                  {getCurrencyPrefix(data.currencyCode)}
+                </span>
+              }
+              value={billAmount}
+              onChange={(e) =>
+                setBillAmount(
+                  formatCurrencyInputWithSeparators(e.target.value, data.currencyCode)
+                )
+              }
+              className="tabular-nums"
+            />
             <Input label={t("budgets.modal.dueDate")} type="date" value={billDue} onChange={(e) => setBillDue(e.target.value)} />
             <Select label={t("budgets.modal.repeat")} value={billFreq} onChange={(e) => setBillFreq(e.target.value as typeof billFreq)} options={[{ value: "once", label: t("budgets.freq.once") }, { value: "monthly", label: t("budgets.freq.monthly") }, { value: "quarterly", label: t("budgets.freq.quarterly") }, { value: "yearly", label: t("budgets.freq.yearly") }]} />
           </div>
@@ -648,7 +698,25 @@ export function FamilyBudgetsBillsView({
           </div>
           <Input label={t("budgets.modal.merchant")} required placeholder={t("budgets.modal.merchantPlaceholder")} value={sMerchant} onChange={(e) => setSMerchant(e.target.value)} />
           <div className="grid gap-3 sm:grid-cols-3">
-            <Input label={t("budgets.modal.amount")} required placeholder="85.00" value={sAmount} onChange={(e) => setSAmount(e.target.value)} className="tabular-nums" />
+            <Input
+              label={t("budgets.modal.amount")}
+              required
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              leadingIcon={
+                <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">
+                  {getCurrencyPrefix(data.currencyCode)}
+                </span>
+              }
+              value={sAmount}
+              onChange={(e) =>
+                setSAmount(
+                  formatCurrencyInputWithSeparators(e.target.value, data.currencyCode)
+                )
+              }
+              className="tabular-nums"
+            />
             <Select label={t("budgets.modal.frequency")} value={sFreq} onChange={(e) => setSFreq(e.target.value as typeof sFreq)} options={[{ value: "weekly", label: t("budgets.freq.weekly") }, { value: "monthly", label: t("budgets.freq.monthly") }, { value: "yearly", label: t("budgets.freq.yearly") }]} />
             <Input label={t("budgets.modal.nextRun")} type="date" value={sNext} onChange={(e) => setSNext(e.target.value)} />
           </div>

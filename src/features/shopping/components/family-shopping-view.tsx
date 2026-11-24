@@ -31,8 +31,10 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   cn,
   formatCurrency,
+  formatCurrencyInputWithSeparators,
+  formatDecimalStringForInput,
   getCurrencyPrefix,
-  sanitizeNumericCurrencyInput,
+  parseCurrencyInputToDecimal,
 } from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
 import {
@@ -189,7 +191,9 @@ export function FamilyShoppingView({
   const handleQuickAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickName.trim()) return;
-    const quickPriceFloat = Number.parseFloat(quickPrice);
+    const quickPriceFloat = Number.parseFloat(
+      parseCurrencyInputToDecimal(quickPrice, effectiveData.currencyCode)
+    );
     const quickPriceCents =
       Number.isFinite(quickPriceFloat) && quickPriceFloat > 0
         ? Math.round(quickPriceFloat * 100)
@@ -336,7 +340,12 @@ export function FamilyShoppingView({
     setEditItemUnit(item.unit || "pcs");
     setEditItemCategory(item.category || "Groceries");
     setEditItemPrice(
-      item.estimatedPriceCents > 0 ? (item.estimatedPriceCents / 100).toFixed(2) : ""
+      item.estimatedPriceCents > 0
+        ? formatDecimalStringForInput(
+            (item.estimatedPriceCents / 100).toFixed(2),
+            effectiveData.currencyCode
+          )
+        : ""
     );
     setEditItemNotes(item.notes ?? "");
   };
@@ -344,7 +353,9 @@ export function FamilyShoppingView({
   const handleUpdateItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem || !editItemName.trim()) return;
-    const priceFloat = Number.parseFloat(editItemPrice);
+    const priceFloat = Number.parseFloat(
+      parseCurrencyInputToDecimal(editItemPrice, effectiveData.currencyCode)
+    );
     const priceCents = Number.isFinite(priceFloat) && priceFloat > 0 ? Math.round(priceFloat * 100) : 0;
 
     setBusy(true);
@@ -662,7 +673,14 @@ export function FamilyShoppingView({
                   </span>
                 }
                 value={quickPrice}
-                onChange={(e) => setQuickPrice(sanitizeNumericCurrencyInput(e.target.value))}
+                onChange={(e) =>
+                  setQuickPrice(
+                    formatCurrencyInputWithSeparators(
+                      e.target.value,
+                      effectiveData.currencyCode
+                    )
+                  )
+                }
                 className="tabular-nums"
               />
               <Select
@@ -1054,7 +1072,14 @@ export function FamilyShoppingView({
                 </span>
               }
               value={editItemPrice}
-              onChange={(e) => setEditItemPrice(sanitizeNumericCurrencyInput(e.target.value))}
+              onChange={(e) =>
+                setEditItemPrice(
+                  formatCurrencyInputWithSeparators(
+                    e.target.value,
+                    effectiveData.currencyCode
+                  )
+                )
+              }
               className="tabular-nums"
             />
           </div>

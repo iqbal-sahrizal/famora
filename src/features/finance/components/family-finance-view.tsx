@@ -32,7 +32,12 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
 import { formatLocalizedDate, toIntlLocale } from "@/lib/i18n";
-import { cn, getCurrencyPrefix, sanitizeNumericCurrencyInput } from "@/lib/utils";
+import {
+  cn,
+  formatCurrencyInputWithSeparators,
+  getCurrencyPrefix,
+  parseCurrencyInputToDecimal,
+} from "@/lib/utils";
 import { useLocale } from "@/providers/locale-provider";
 import {
   archiveFinanceAccountAction,
@@ -162,7 +167,11 @@ export function FamilyFinanceView({
   }
 
   const filteredTx = data.transactions.filter((t) => {
-    if (kindFilter !== "all" && t.kind !== kindFilter) return false;
+    if (kindFilter === "reversal") {
+      if (t.kind !== "reversal" && !t.isReversed) return false;
+    } else if (kindFilter !== "all") {
+      if (t.kind !== kindFilter || t.isReversed) return false;
+    }
     if (accountFilter !== "all" && t.accountId !== accountFilter) return false;
     const q = search.trim().toLowerCase();
     if (
@@ -264,13 +273,13 @@ export function FamilyFinanceView({
       familyId,
       accountId: targetAccountId,
       kind: txKind,
-      amount: txAmount,
-      merchant: txMerchant,
+      amount: parseCurrencyInputToDecimal(txAmount, data.currencyCode),
+      merchant: txKind === "income" ? t("finance.txType.income") : txMerchant,
       category: txKind === "transfer" ? "Transfer" : txCategory,
       occurredOn: txDate,
       notes: txNotes,
       transferAccountId: txKind === "transfer" ? txTransferDst || null : null,
-      attachmentName: txAttachment.trim() || null,
+      attachmentName: txKind === "income" ? null : txAttachment.trim() || null,
       idempotencyKey: crypto.randomUUID(),
     });
     setBusy(false);
@@ -723,7 +732,11 @@ export function FamilyFinanceView({
                 </span>
               }
               value={txAmount}
-              onChange={(e) => setTxAmount(sanitizeNumericCurrencyInput(e.target.value))}
+              onChange={(e) =>
+                setTxAmount(
+                  formatCurrencyInputWithSeparators(e.target.value, data.currencyCode)
+                )
+              }
               className="tabular-nums"
             />
           </div>
@@ -746,13 +759,15 @@ export function FamilyFinanceView({
             />
           )}
 
-          <Input
-            label={txKind === "transfer" ? t("finance.modal.transferDescLabel") : t("finance.modal.merchantLabel")}
-            required
-            placeholder={t("finance.merchantPlaceholder")}
-            value={txMerchant}
-            onChange={(e) => setTxMerchant(e.target.value)}
-          />
+          {txKind !== "income" && (
+            <Input
+              label={txKind === "transfer" ? t("finance.modal.transferDescLabel") : t("finance.modal.merchantLabel")}
+              required
+              placeholder={t("finance.merchantPlaceholder")}
+              value={txMerchant}
+              onChange={(e) => setTxMerchant(e.target.value)}
+            />
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             {txKind !== "transfer" && (
@@ -780,12 +795,14 @@ export function FamilyFinanceView({
             value={txNotes}
             onChange={(e) => setTxNotes(e.target.value)}
           />
-          <Input
-            label={t("finance.modal.receiptLabel")}
-            placeholder={t("finance.receiptPlaceholder")}
-            value={txAttachment}
-            onChange={(e) => setTxAttachment(e.target.value)}
-          />
+          {txKind !== "income" && (
+            <Input
+              label={t("finance.modal.receiptLabel")}
+              placeholder={t("finance.receiptPlaceholder")}
+              value={txAttachment}
+              onChange={(e) => setTxAttachment(e.target.value)}
+            />
+          )}
 
           <Button type="submit" className="w-full" isLoading={busy}>
             {t("finance.modal.saveTxBtn")}
@@ -857,12 +874,6 @@ export function FamilyFinanceView({
               ]}
             />
           </div>
-          <Input
-            label={t("finance.modal.monthlyBudgetLabel")}
-            value={editAccBudget}
-            onChange={(e) => setEditAccBudget(e.target.value)}
-            className="tabular-nums"
-          />
           <Button type="submit" className="w-full" isLoading={busy}>
             {t("common.saveChanges")}
           </Button>

@@ -52,7 +52,7 @@ export function formatNumericCurrency(
   const abs = negative ? -minor : minor;
   const whole = Number(abs / 100n);
   const frac = Number(abs % 100n) / 100;
-  const resolvedLocale = locale ?? (currency === "IDR" ? "id-ID" : "en-US");
+  const resolvedLocale = currency === "IDR" ? "id-ID" : locale ?? "en-US";
   const isZeroDecimal = currency === "IDR" || currency === "JPY";
   const formatted = new Intl.NumberFormat(resolvedLocale, {
     style: "currency",
